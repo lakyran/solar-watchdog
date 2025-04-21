@@ -344,6 +344,45 @@ class GrowattAIAgent:
             # Return original text as fallback
             return {"analysis": markdown_text, "parse_error": str(e)}
     
+    def _prune_short_disruption_events(self, disruption_events, min_duration_minutes=45):
+        """
+        Prune disruption events with duration less than the specified minimum minutes.
+        
+        Args:
+            disruption_events (list): List of disruption event dictionaries
+            min_duration_minutes (int): Minimum duration in minutes to keep an event
+            
+        Returns:
+            list: Filtered list of disruption events
+        """
+        if not isinstance(disruption_events, list):
+            return disruption_events
+            
+        filtered_events = []
+        for event in disruption_events:
+            # Check if total_duration field exists
+            if "total_duration" in event:
+                duration_str = event["total_duration"]
+                # Try to match patterns like "25 minutes", "1 hour 15 minutes", etc.
+                hours_match = re.search(r'(\d+)\s*(?:hour|hr|h)s?', duration_str, re.IGNORECASE)
+                minutes_match = re.search(r'(\d+)\s*(?:minute|min|m)s?', duration_str, re.IGNORECASE)
+                
+                # Calculate total minutes
+                total_minutes = 0
+                if hours_match:
+                    total_minutes += int(hours_match.group(1)) * 60
+                if minutes_match:
+                    total_minutes += int(minutes_match.group(1))
+                
+                # If we couldn't parse the duration or it's >= min_duration_minutes, keep the event
+                if not (hours_match or minutes_match) or total_minutes >= min_duration_minutes:
+                    filtered_events.append(event)
+            else:
+                # If there's no total_duration field, keep the event
+                filtered_events.append(event)
+        
+        return filtered_events
+
     async def process_query(self, user_query: str, context: dict = None) -> dict:
         """
         Process a user query using the Azure AI agent
@@ -410,6 +449,11 @@ class GrowattAIAgent:
             
             # Try to extract JSON from the response text
             disruption_events = self._parse_markdown_to_json(response_text)
+            print(f"Disruption events count before pruning: {len(disruption_events)}")
+
+            # Prune disruption events to remove events that have duration less than 30 minutes
+            disruption_events = self._prune_short_disruption_events(disruption_events)
+            print(f"Disruption events count after pruning: {len(disruption_events)}")
             
             # Update the response with any disruption events found
             if isinstance(disruption_events, list) and disruption_events:
@@ -417,6 +461,7 @@ class GrowattAIAgent:
             elif isinstance(disruption_events, dict) and "parse_error" in disruption_events:
                 response["parse_error"] = disruption_events.get("parse_error")
             
+            self.cleanup_thread(thread_id)
             return response
             
         except Exception as e:

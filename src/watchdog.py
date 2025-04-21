@@ -28,8 +28,9 @@ class Watchdog:
 
         try:
             # If date not provided, fetch the date of the last record in the database. If no records, then use yesterday
-            dont_change_date = False
+            dont_change_date = True
             if not date_str:
+                dont_change_date = False
                 last_record_date = self.db_client.get_last_record_date_for_device(device_sn)
                 if last_record_date:
                     date_str = last_record_date
@@ -38,8 +39,6 @@ class Watchdog:
                     yesterday = datetime.now() - timedelta(days=1)
                     date_str = yesterday.strftime('%Y-%m-%d')
                     print(f"No last record date found for device {device_sn}, using yesterday's date: {date_str}")
-            else:
-                dont_change_date = True
 
             # Get records from db for device and date
             records = self.db_client.get_device_records_by_date(device_sn, date_str)
@@ -186,7 +185,7 @@ class Watchdog:
             response = {
                 'device_id': device_sn,
                 'date': date_str,
-                'record_count': len(generation_history),
+                'count': len(analysis_result['disruption_events']),
                 'disruption_events': analysis_result['disruption_events']
             }
             
