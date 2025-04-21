@@ -1,0 +1,19 @@
+Flask==3.0.2
+gunicorn==21.2.0
+python-dotenv==1.0.1
+requests==2.31.0
+azure-identity>=1.15.0
+azure-ai-generative==1.0.0b11
+openmeteo-py==0.0.1
+numpy==1.26.4
+pandas==2.2.1
+aiodns
+azure-ai-projects>=0.4.0
+openmeteo-requests
+requests-cache
+psycopg2-binary
+openai>=1.6.0
+aiohttp>=3.8.6
+# Optional dependencies for tracing
+# opentelemetry-sdk>=1.20.0
+# azure-monitor-opentelemetry>=1.2.0 
