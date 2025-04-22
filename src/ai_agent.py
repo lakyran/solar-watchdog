@@ -14,7 +14,7 @@ load_dotenv()
 
 class GrowattAIAgent:
     def __init__(self):
-        self.project_connection_string = os.getenv('PROJECT_CONNECTION_STRING')
+        self.project_connection_string = os.getenv('PROJECT_CONNECTION_STRING_AI')
         if not self.project_connection_string:
             raise ValueError("Azure AI Project configuration is missing. Please set PROJECT_CONNECTION_STRING in .env file")
 
