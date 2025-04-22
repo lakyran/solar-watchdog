@@ -8,7 +8,7 @@ openmeteo-py==0.0.1
 numpy==1.26.4
 pandas<2.2
 aiodns
-azure-ai-projects>=0.4.0
+azure-ai-projects==1.0.0.b9
 openmeteo-requests
 requests-cache
 psycopg2-binary
