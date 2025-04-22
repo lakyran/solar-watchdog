@@ -108,7 +108,7 @@ class GrowattAIAgent:
             date (str): Date in YYYY-MM-DD format (must be current or past date)
         
         Returns:
-            dict: Weather data including temperature, cloud cover, solar radiation, and rain
+            dict: Weather data including temperature, cloud cover, solar radiation, rain, and sunrise/sunset times
         
         Raises:
             ValueError: If the requested date is in the future
@@ -135,13 +135,14 @@ class GrowattAIAgent:
                 "start_date": target_date.strftime("%Y-%m-%d"),
                 "end_date": target_date.strftime("%Y-%m-%d"),
                 "hourly": ["temperature_2m", "cloud_cover", "direct_radiation", "rain", "precipitation"],
+                "daily": ["sunrise", "sunset"],  # Add sunrise and sunset to daily parameters
                 "timezone": "auto"
             }
             
             responses = self.weather_client.weather_api(url, params=params)
             response = responses[0]
             
-            # Process the response
+            # Process the hourly response
             hourly = response.Hourly()
             hourly_temperature = hourly.Variables(0).ValuesAsNumpy()
             hourly_cloud_cover = hourly.Variables(1).ValuesAsNumpy()
@@ -149,7 +150,12 @@ class GrowattAIAgent:
             hourly_rain = hourly.Variables(3).ValuesAsNumpy()
             hourly_precipitation = hourly.Variables(4).ValuesAsNumpy()
             
-            # Create DataFrame
+            # Process the daily response for sunrise and sunset
+            daily = response.Daily()
+            sunrise_time = daily.Variables(0).ValuesAsNumpy()
+            sunset_time = daily.Variables(1).ValuesAsNumpy()
+            
+            # Create DataFrame for hourly data
             data = {
                 "date": pd.date_range(
                     start=pd.to_datetime(hourly.Time(), unit="s"),
@@ -166,10 +172,16 @@ class GrowattAIAgent:
             
             df = pd.DataFrame(data=data)
             
+            # Format sunrise and sunset times
+            sunrise = pd.to_datetime(sunrise_time[0], unit="s").strftime("%H:%M:%S")
+            sunset = pd.to_datetime(sunset_time[0], unit="s").strftime("%H:%M:%S")
+            
             return {
                 "date": date,
                 "location": {"latitude": latitude, "longitude": longitude},
                 "weather_data": df.to_dict(orient='records'),
+                "sunrise": sunrise,
+                "sunset": sunset,
                 "source": "historical" if target_date.date() < current_date else "current"
             }
             
@@ -344,7 +356,7 @@ class GrowattAIAgent:
             # Return original text as fallback
             return {"analysis": markdown_text, "parse_error": str(e)}
     
-    def _prune_short_disruption_events(self, disruption_events, min_duration_minutes=45):
+    def _prune_short_disruption_events(self, disruption_events, min_duration_minutes=30):
         """
         Prune disruption events with duration less than the specified minimum minutes.
         
