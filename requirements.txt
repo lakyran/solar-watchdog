@@ -6,7 +6,7 @@ azure-identity>=1.15.0
 azure-ai-generative==1.0.0b11
 openmeteo-py==0.0.1
 numpy==1.26.4
-pandas==2.2.1
+pandas<2.2
 aiodns
 azure-ai-projects>=0.4.0
 openmeteo-requests
