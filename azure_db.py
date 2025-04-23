@@ -584,4 +584,53 @@ class AzureDB:
             if cursor:
                 cursor.close()
             if conn:
+                self.connection_pool.putconn(conn)
+    
+    def get_inverters_list(self):
+        """
+        Get a list of all inverters in the database with their serial numbers and user names.
+        
+        Returns:
+            list: A list of dictionaries containing device_sn and user_name for each inverter
+        """
+        if not self.connection_pool:
+            raise ValueError("Database connection pool not available")
+        
+        conn = None
+        cursor = None
+        
+        try:
+            # Get connection from pool
+            conn = self.connection_pool.getconn()
+            cursor = conn.cursor()
+            
+            # Query to get all distinct inverters
+            cursor.execute(
+                """
+                SELECT DISTINCT device_sn, user_name, device_type, vendor, plant_id
+                FROM inverters
+                ORDER BY user_name, device_sn
+                """
+            )
+            
+            # Get column names
+            column_names = ['device_sn', 'user_name', 'device_type', 'vendor', 'plant_id']
+            
+            # Fetch all rows and convert to dictionaries
+            inverters = []
+            for row in cursor.fetchall():
+                inverter = dict(zip(column_names, row))
+                inverters.append(inverter)
+                
+            return inverters
+            
+        except Exception as e:
+            error_msg = f"Error fetching inverters list: {str(e)}"
+            self.logger.error(error_msg)
+            raise Exception(error_msg)
+        
+        finally:
+            if cursor:
+                cursor.close()
+            if conn:
                 self.connection_pool.putconn(conn) 

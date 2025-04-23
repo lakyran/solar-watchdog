@@ -305,12 +305,20 @@ def view_device_disruption_events():
         device_sn = request.args.get('device_sn')
         date_str = request.args.get('date', None)
         
+        # Get the list of inverters for the dropdown
+        try:
+            inverters = watchdog.db_client.get_inverters_list()
+        except Exception as e:
+            print(f"Error fetching inverters list: {str(e)}")
+            inverters = []
+        
         # Validate that device_sn is provided
         if not device_sn:
             return render_template('disruption_events.html', 
                                   device_sn='',
                                   date=None,
                                   events=[],
+                                  inverters=inverters,
                                   error='device_sn parameter is required')
             
         # Call the watchdog method to get disruption events
@@ -322,28 +330,42 @@ def view_device_disruption_events():
                                   device_sn=device_sn,
                                   date=date_str,
                                   events=[],
+                                  inverters=inverters,
                                   error=result[0].get('message', 'Unknown error'))
             
         # Extract the events from the result
         events = result.get('disruption_events', [])
         
-        # Debug: Print the first event to see its structure
-        if events and len(events) > 0:
-            print("First event structure:", events[0])
-            print("Event keys:", events[0].keys())
-        
         # Render the template with the data
         return render_template('disruption_events.html', 
                               device_sn=device_sn,
                               date=date_str if date_str else result.get('date'),
-                              events=events)
+                              events=events,
+                              inverters=inverters)
                               
     except Exception as e:
         return render_template('disruption_events.html', 
                               device_sn=device_sn if 'device_sn' in locals() else '',
                               date=date_str if 'date_str' in locals() else None,
                               events=[],
+                              inverters=[],
                               error=str(e))
+
+@app.route('/inverters/list', methods=['GET'])
+def get_inverters_list():
+    """Get a list of all inverters in the database"""
+    try:
+        # Get the list of inverters from the database
+        inverters = watchdog.db_client.get_inverters_list()
+        
+        # Return the list as JSON
+        return jsonify({
+            'status': 'success',
+            'count': len(inverters),
+            'inverters': inverters
+        })
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
 
 if __name__ == '__main__':
     app.run()
