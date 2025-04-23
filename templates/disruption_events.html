@@ -5,6 +5,25 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Unisolartech Watchdog - Disruptions on {{ device_sn }}</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        function formatDate(dateStr) {
+            if (!dateStr) return '--';
+            
+            const date = new Date(dateStr);
+            const options = { day: 'numeric', month: 'long', year: 'numeric' };
+            return date.toLocaleDateString('en-US', options);
+        }
+        
+        document.addEventListener('DOMContentLoaded', function() {
+            // Format all date cells
+            document.querySelectorAll('.format-date').forEach(function(el) {
+                const originalDate = el.getAttribute('data-date');
+                if (originalDate) {
+                    el.textContent = formatDate(originalDate);
+                }
+            });
+        });
+    </script>
     <style>
         .wrap-content {
             white-space: normal;
@@ -76,7 +95,7 @@
                 <div>
                     {% if date %}
                         <p class="text-sm text-gray-500 mb-1">Date</p>
-                        <p class="font-medium">{{ date }}</p>
+                        <p class="font-medium format-date" data-date="{{ date }}">{{ date }}</p>
                     {% else %}
                         <p class="text-sm text-gray-500 mb-1">Date Range</p>
                         <p class="font-medium">All Recorded Dates</p>
@@ -106,7 +125,7 @@
                     <tbody>
                         {% for event in events %}
                             <tr class="border-b hover:bg-gray-50 {% if event.severity == 'high' %}bg-red-50{% elif event.severity == 'medium' %}bg-yellow-50{% endif %}">
-                                <td class="px-4 py-3 w-date">{{ event.event_date }}</td>
+                                <td class="px-4 py-3 w-date format-date" data-date="{{ event.event_date }}">{{ event.event_date }}</td>
                                 <td class="px-4 py-3 w-time">{{ event.start_time }}</td>
                                 <td class="px-4 py-3 w-time">{{ event.end_time }}</td>
                                 <td class="px-4 py-3 text-right w-duration">
