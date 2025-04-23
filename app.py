@@ -1,4 +1,4 @@
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify, request, render_template
 import os
 from dotenv import load_dotenv
 from ai_agent import GrowattAIAgent
@@ -296,6 +296,54 @@ def get_device_disruption_events():
         return jsonify(result)
     except Exception as e:
         return jsonify({'status': 'error', 'message': str(e)}), 500
+
+@app.route('/device/disruptions/view', methods=['GET'])
+def view_device_disruption_events():
+    """Display disruption events for a device in a human-readable HTML format"""
+    try:
+        # Get device_sn and optional date from request data
+        device_sn = request.args.get('device_sn')
+        date_str = request.args.get('date', None)
+        
+        # Validate that device_sn is provided
+        if not device_sn:
+            return render_template('disruption_events.html', 
+                                  device_sn='',
+                                  date=None,
+                                  events=[],
+                                  error='device_sn parameter is required')
+            
+        # Call the watchdog method to get disruption events
+        result = watchdog.get_device_disruption_events_route(device_sn, date_str)
+        
+        # If the result is a tuple with status code, handle the error
+        if isinstance(result, tuple):
+            return render_template('disruption_events.html', 
+                                  device_sn=device_sn,
+                                  date=date_str,
+                                  events=[],
+                                  error=result[0].get('message', 'Unknown error'))
+            
+        # Extract the events from the result
+        events = result.get('disruption_events', [])
+        
+        # Debug: Print the first event to see its structure
+        if events and len(events) > 0:
+            print("First event structure:", events[0])
+            print("Event keys:", events[0].keys())
+        
+        # Render the template with the data
+        return render_template('disruption_events.html', 
+                              device_sn=device_sn,
+                              date=date_str if date_str else result.get('date'),
+                              events=events)
+                              
+    except Exception as e:
+        return render_template('disruption_events.html', 
+                              device_sn=device_sn if 'device_sn' in locals() else '',
+                              date=date_str if 'date_str' in locals() else None,
+                              events=[],
+                              error=str(e))
 
 if __name__ == '__main__':
     app.run()

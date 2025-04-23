@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Unisolar Tech Watchdog - Disruptions on {{ device_sn }}</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .wrap-content {
+            white-space: normal;
+            word-wrap: break-word;
+            max-width: 300px;
+            overflow-wrap: break-word;
+        }
+        
+        /* Fixed column widths to prevent bleeding */
+        .table-fixed {
+            table-layout: fixed;
+        }
+        
+        .w-date {
+            width: 100px;
+        }
+        
+        .w-time {
+            width: 160px;
+        }
+        
+        .w-duration {
+            width: 120px;
+        }
+        
+        .w-fault {
+            width: 300px;
+        }
+        
+        .w-root {
+            width: 300px;
+        }
+        
+        .w-status {
+            width: 120px;
+        }
+    </style>
+</head>
+<body class="bg-gray-50 text-gray-800">
+    <div class="container mx-auto px-4 py-8 max-w-full">
+        <h1 class="text-3xl font-bold text-gray-700 mb-8 border-b pb-2">UniSolar Watchdog - Disruption Events</h1>
+        
+        {% if error %}
+            <div class="bg-red-100 border-l-4 border-red-500 text-red-700 p-4 mb-6 rounded-md shadow">
+                <div class="flex">
+                    <div class="flex-shrink-0">
+                        <svg class="h-5 w-5 text-red-500" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd" />
+                        </svg>
+                    </div>
+                    <div class="ml-3">
+                        <p class="text-sm font-medium">{{ error }}</p>
+                    </div>
+                </div>
+            </div>
+        {% endif %}
+        
+        <div class="bg-white shadow-md rounded-lg p-6 mb-8 border border-gray-200">
+            <h2 class="text-xl font-semibold text-gray-700 mb-4">Device Information</h2>
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div>
+                    <p class="text-sm text-gray-500 mb-1">Device SN</p>
+                    <p class="font-medium">{{ device_sn }}</p>
+                </div>
+                <div>
+                    <p class="text-sm text-gray-500 mb-1">User Name</p>
+                    <p class="font-medium">{{ events[0].user_name|default(events[0].vendor|default('--')) if events else '--' }}</p>
+                </div>
+                <div>
+                    {% if date %}
+                        <p class="text-sm text-gray-500 mb-1">Date</p>
+                        <p class="font-medium">{{ date }}</p>
+                    {% else %}
+                        <p class="text-sm text-gray-500 mb-1">Date Range</p>
+                        <p class="font-medium">All Recorded Dates</p>
+                    {% endif %}
+                </div>
+                <div>
+                    <p class="text-sm text-gray-500 mb-1">Total Events</p>
+                    <p class="font-medium">{{ events|length }}</p>
+                </div>
+            </div>
+        </div>
+
+        {% if events %}
+            <div class="overflow-x-auto relative shadow-md rounded-lg border border-gray-200">
+                <table class="w-full text-sm text-left table-fixed">
+                    <thead class="text-xs text-gray-700 uppercase bg-gray-100">
+                        <tr>
+                            <th class="px-4 py-3 sticky top-0 bg-gray-100 w-date">Date</th>
+                            <th class="px-4 py-3 sticky top-0 bg-gray-100 w-time">Start Time</th>
+                            <th class="px-4 py-3 sticky top-0 bg-gray-100 w-time">End Time</th>
+                            <th class="px-4 py-3 sticky top-0 bg-gray-100 w-duration">Duration (min)</th>
+                            <th class="px-4 py-3 sticky top-0 bg-gray-100 w-fault">Fault Details</th>
+                            <th class="px-4 py-3 sticky top-0 bg-gray-100 w-root">Root Cause</th>
+                            <th class="px-4 py-3 sticky top-0 bg-gray-100 w-status">Ongoing Event?</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for event in events %}
+                            <tr class="border-b hover:bg-gray-50 {% if event.severity == 'high' %}bg-red-50{% elif event.severity == 'medium' %}bg-yellow-50{% endif %}">
+                                <td class="px-4 py-3 w-date">{{ event.event_date }}</td>
+                                <td class="px-4 py-3 w-time">{{ event.start_time }}</td>
+                                <td class="px-4 py-3 w-time">{{ event.end_time }}</td>
+                                <td class="px-4 py-3 text-right w-duration">
+                                {% if event.total_duration is defined and event.total_duration is not none %}
+                                    {{ event.total_duration }}
+                                {% elif event.duration is defined and event.duration is not none %}
+                                    {{ event.duration }}
+                                {% else %}
+                                    --
+                                {% endif %}
+                                </td>
+                                <td class="px-4 py-3 wrap-content w-fault">{{ event.fault_details|default(event.fault_code|default('--')) }}</td>
+                                <td class="px-4 py-3 wrap-content w-root">{{ event.root_cause_analysis|default('--') }}</td>
+                                <td class="px-4 py-3 w-status {% if event.is_ongoing %}text-red-600 font-semibold{% endif %}">{% if event.is_ongoing %}Yes{% else %}No{% endif %}</td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% else %}
+            <div class="bg-white p-8 text-center shadow-md rounded-lg border border-gray-200">
+                <svg class="h-12 w-12 text-gray-400 mx-auto mb-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <p class="text-gray-500 italic">No disruption events found for this device{% if date %} on {{ date }}{% endif %}.</p>
+            </div>
+        {% endif %}
+    </div>
+</body>
+</html> 
