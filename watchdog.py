@@ -197,7 +197,7 @@ class Watchdog:
             self.logger.error(error_msg)
             return {'error': error_msg}, 500
         
-    def analyze_device_generation_data_and_store_disruptions_route(self, device_sn, date_str=None):
+    def analyze_device_generation_data_and_store_disruptions_route(self, device_sn, date_str=None, overwrite=False):
         """
         Reuses the analyze_device_generation_data_route method and additionally 
         stores any disruption events found in the DB table `disruption_events`
@@ -210,6 +210,16 @@ class Watchdog:
             dict: Response containing generation data, AI analysis, and disruption storage results
         """
         try:
+            # Get the disruption events from the database
+            disruption_events = self.db_client.get_disruption_events(device_sn, date_str)
+            # If records exist and overwrite is True, then first delete the records for the device and date
+            if len(disruption_events) > 0 and overwrite:
+                self.logger.info(f"Deleting disruption events for device {device_sn} on {date_str}")
+                print(f"Deleting disruption events for device {device_sn} on {date_str}")
+                db_result = self.db_client.delete_disruption_events(device_sn, date_str)
+                if db_result['status'] == 'success':
+                    print(f"Deleted {db_result['deleted_records']} disruption events for device {device_sn} on {date_str}")
+
             # First get the analysis results using the existing route
             analysis_response = self.analyze_device_generation_data_route(device_sn, date_str)
             

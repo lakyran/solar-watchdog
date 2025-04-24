@@ -101,7 +101,7 @@ TASK_STATUS = {
     'FAILED': 'failed'
 }
 
-def run_date_range_analysis(task_id, device_sn, start_date, end_date):
+def run_date_range_analysis(task_id, device_sn, start_date, end_date, overwrite):
     """
     Background function to run date range analysis
     """
@@ -131,7 +131,7 @@ def run_date_range_analysis(task_id, device_sn, start_date, end_date):
             }
             
             # Get analysis for this date
-            result = watchdog.analyze_device_generation_data_and_store_disruptions_route(device_sn, date_str)
+            result = watchdog.analyze_device_generation_data_and_store_disruptions_route(device_sn, date_str, overwrite)
             
             # Skip error responses
             if isinstance(result, tuple) and len(result) > 1 and result[1] >= 400:
@@ -183,6 +183,7 @@ def analyze_device_disruptions_date_range():
         device_sn = request.args.get('device_sn')
         start_date = request.args.get('start_date')
         end_date = request.args.get('end_date')
+        overwrite = request.args.get('overwrite', False)
         
         # Validate required parameters
         if not device_sn:
@@ -222,7 +223,7 @@ def analyze_device_disruptions_date_range():
         # Start background thread
         thread = threading.Thread(
             target=run_date_range_analysis,
-            args=(task_id, device_sn, start_date, end_date)
+            args=(task_id, device_sn, start_date, end_date, overwrite)
         )
         thread.daemon = True
         thread.start()

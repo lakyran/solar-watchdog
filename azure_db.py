@@ -633,4 +633,59 @@ class AzureDB:
             if cursor:
                 cursor.close()
             if conn:
+                self.connection_pool.putconn(conn)
+    
+    def delete_disruption_events(self, device_sn, date):
+        """
+        Delete all disruption events for a specific device on a specific date
+        
+        Args:
+            device_sn (str): Device serial number
+            date (str): Date string in YYYY-MM-DD format
+            
+        Returns:
+            dict: Result of the operation with count of deleted records
+        """
+        if not self.connection_pool:
+            raise ValueError("Database connection pool not available")
+        
+        conn = None
+        cursor = None
+        
+        try:
+            # Get connection from pool
+            conn = self.connection_pool.getconn()
+            cursor = conn.cursor()
+            
+            # Query to delete all disruption events for the device on the specified date
+            cursor.execute(
+                """
+                DELETE FROM disruption_events 
+                WHERE device_sn = %s AND event_date = %s
+                """,
+                (device_sn, date)
+            )
+            
+            # Get number of deleted rows
+            deleted_count = cursor.rowcount
+            
+            # Commit the transaction
+            conn.commit()
+            
+            return {
+                "status": "success",
+                "deleted_records": deleted_count
+            }
+            
+        except Exception as e:
+            if conn:
+                conn.rollback()
+            error_msg = f"Database error deleting disruption events: {str(e)}"
+            self.logger.error(error_msg)
+            raise Exception(error_msg)
+        
+        finally:
+            if cursor:
+                cursor.close()
+            if conn:
                 self.connection_pool.putconn(conn) 
