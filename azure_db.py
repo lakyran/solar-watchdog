@@ -425,7 +425,7 @@ class AzureDB:
                         further_action_required
                     FROM disruption_events 
                     WHERE device_sn = %s AND event_date = %s
-                    ORDER BY event_date DESC, start_time ASC
+                    ORDER BY event_date DESC, start_time DESC
                     """,
                     (device_sn, date)
                 )
@@ -455,7 +455,7 @@ class AzureDB:
                         TO_CHAR(created_at, 'YYYY-MM-DD HH24:MI:SS') as created_at
                     FROM disruption_events 
                     WHERE device_sn = %s
-                    ORDER BY event_date DESC, start_time ASC
+                    ORDER BY event_date DESC, start_time DESC
                     """,
                     (device_sn,)
                 )
