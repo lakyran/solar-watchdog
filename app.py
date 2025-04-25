@@ -368,5 +368,81 @@ def get_inverters_list():
     except Exception as e:
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
+@app.route('/history/batch-ingest', methods=['GET'])
+def batch_ingest_inverters_history():
+    """Get a list of all inverters and ingest generation history for each one"""
+    try:
+        # Optional query parameters
+        date = request.args.get('date', None)
+        overwrite = request.args.get('overwrite', False)
+        store_records = request.args.get('store_records', True)
+        
+        # Get the list of all inverters
+        inverters = watchdog.db_client.get_inverters_list()
+        
+        # Track results for each inverter
+        results = []
+        
+        # Process each inverter
+        for inverter in inverters:
+            device_sn = inverter['device_sn']
+            device_results = []
+            current_date = date
+            
+            try:
+                # Keep fetching history until we get a 'skipped' status
+                while True:
+                    # Ingest generation history for this inverter
+                    ingest_result = watchdog.fetch_and_store_device_generation_history(
+                        device_sn, current_date, overwrite, store_records)
+                    
+                    # Add device info to the result
+                    ingest_result['user_name'] = inverter.get('user_name', '')
+                    ingest_result['device_type'] = inverter.get('device_type', '')
+                    
+                    # Add to device results
+                    device_results.append(ingest_result)
+                    
+                    # If status is skipped, we're done with this device
+                    if ingest_result.get('status') == 'skipped':
+                        break
+                    
+                    # If there was a date change in the result, update our current date
+                    if current_date != ingest_result.get('date'):
+                        current_date = ingest_result.get('date')
+                    
+                # Add all results for this device
+                results.append({
+                    'device_id': device_sn,
+                    'user_name': inverter.get('user_name', ''),
+                    'device_type': inverter.get('device_type', ''),
+                    'status': 'success',
+                    'results_count': len(device_results),
+                    'results': device_results
+                })
+                
+            except Exception as e:
+                # If one inverter fails, continue with others but log the error
+                results.append({
+                    'device_id': device_sn,
+                    'user_name': inverter.get('user_name', ''),
+                    'device_type': inverter.get('device_type', ''),
+                    'status': 'error',
+                    'error': str(e),
+                    'partial_results': device_results
+                })
+        
+        # Return the aggregated results
+        return jsonify({
+            'status': 'success',
+            'total_inverters': len(inverters),
+            'processed_inverters': len(results),
+            'date': date,
+            'results': results
+        })
+        
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
 if __name__ == '__main__':
     app.run()
