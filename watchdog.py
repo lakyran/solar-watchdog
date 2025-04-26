@@ -36,9 +36,9 @@ class Watchdog:
                     date_str = last_record_date
                     print(f"Last record date found for device {device_sn}: {last_record_date}")
                 else:
-                    yesterday = datetime.now() - timedelta(days=1)
-                    date_str = yesterday.strftime('%Y-%m-%d')
-                    print(f"No last record date found for device {device_sn}, using yesterday's date: {date_str}")
+                    today = datetime.now()
+                    date_str = today.strftime('%Y-%m-%d')
+                    print(f"No last record date found for device {device_sn}, using today's date: {date_str}")
 
             # Get records from db for device and date
             records = self.db_client.get_device_records_by_date(device_sn, date_str)
@@ -70,8 +70,8 @@ class Watchdog:
             if records_count == 0 or overwrite:
                 page = 1
             else:
-                yesterday = datetime.now() - timedelta(days=1)
-                if records_count == total_records_on_day and (dont_change_date or date_str == yesterday.strftime('%Y-%m-%d')):
+                today = datetime.now()
+                if records_count == total_records_on_day and (dont_change_date or date_str == today.strftime('%Y-%m-%d')):
                     self.logger.info(f"All records for device {device_sn} on {date_str} already exist, skipping fetch and store")
                     print(f"All records for device {device_sn} on {date_str} already exist, skipping fetch and store")
                     response = {
