@@ -8,9 +8,18 @@ from azure_db import AzureDB
 from ai_agent import GrowattAIAgent
 import math
 class Watchdog:
+    # Task status constants
+    TASK_STATUS = {
+        'PENDING': 'pending',
+        'RUNNING': 'running',
+        'COMPLETED': 'completed',
+        'FAILED': 'failed'
+    }
+    
     def __init__(self, app=None):
         self.app = app
         self.logger = logging.getLogger(__name__)
+        self.background_tasks = {}
         
         # Initialize Growatt API client
         self.growatt_client = GrowattAPI()
@@ -359,3 +368,137 @@ class Watchdog:
             error_msg = f"Error fetching disruption events for {device_sn}: {str(e)}"
             self.logger.error(error_msg)
             return {'status': 'error', 'message': error_msg}, 500
+
+    def analyze_device_disruptions_date_range(self, device_sn, start_date, end_date, overwrite=False):
+        """
+        Creates and manages a background task for analyzing device disruptions over a date range.
+        
+        Args:
+            device_sn (str): Device serial number
+            start_date (str): Start date in YYYY-MM-DD format
+            end_date (str): End date in YYYY-MM-DD format
+            overwrite (bool, optional): Whether to overwrite existing data. Defaults to False.
+            
+        Returns:
+            dict: Response containing task information
+        """
+        import uuid
+        import threading
+        from datetime import datetime
+        
+        # Create a task ID
+        task_id = str(uuid.uuid4())
+        
+        # Setup background task
+        self.background_tasks[task_id] = {
+            'id': task_id,
+            'type': 'date_range_analysis',
+            'device_sn': device_sn,
+            'start_date': start_date,
+            'end_date': end_date,
+            'created_at': datetime.now().isoformat(),
+            'status': self.TASK_STATUS['PENDING'],
+            'progress': {
+                'days_processed': 0,
+                'days_total': (datetime.strptime(end_date, '%Y-%m-%d') - datetime.strptime(start_date, '%Y-%m-%d')).days + 1
+            }
+        }
+        
+        # Start background thread
+        thread = threading.Thread(
+            target=self.run_date_range_analysis,
+            args=(task_id, device_sn, start_date, end_date, overwrite)
+        )
+        thread.daemon = True
+        thread.start()
+        
+        # Return task information
+        return {
+            'task_id': task_id,
+            'status': 'accepted',
+            'message': 'Analysis started in background',
+            'check_status_url': f'/tasks/{task_id}'
+        }
+    
+    def run_date_range_analysis(self, task_id, device_sn, start_date, end_date, overwrite):
+        """
+        Background function to run date range analysis
+        
+        Args:
+            task_id (str): ID of the background task
+            device_sn (str): Device serial number
+            start_date (str): Start date in YYYY-MM-DD format
+            end_date (str): End date in YYYY-MM-DD format
+            overwrite (bool): Whether to overwrite existing data
+        """
+        try:
+            task = self.background_tasks[task_id]
+            task['status'] = self.TASK_STATUS['RUNNING']
+            
+            # Convert dates
+            start = datetime.strptime(start_date, '%Y-%m-%d')
+            end = datetime.strptime(end_date, '%Y-%m-%d')
+            
+            # Analyze each day in the range
+            current_date = start
+            all_results = []
+            days_processed = 0
+            days_total = (end - start).days + 1
+            
+            while current_date <= end:
+                date_str = current_date.strftime('%Y-%m-%d')
+                print(f"Analyzing data for device {device_sn} on {date_str}")
+                
+                # Update task progress
+                task['progress'] = {
+                    'days_processed': days_processed,
+                    'days_total': days_total,
+                    'current_date': date_str
+                }
+                
+                # Get analysis for this date
+                result = self.analyze_device_generation_data_and_store_disruptions_route(device_sn, date_str, overwrite)
+                
+                # Skip error responses
+                if isinstance(result, tuple) and len(result) > 1 and result[1] >= 400:
+                    print(f"Error analyzing {date_str}: {result[0]}")
+                    current_date += timedelta(days=1)
+                    days_processed += 1
+                    # Add sleep to avoid hammering the API
+                    import time
+                    time.sleep(1)
+                    continue
+                    
+                # Add date to the result
+                if isinstance(result, dict):
+                    result['date'] = date_str
+                    all_results.append(result)
+                
+                # Move to next day
+                current_date += timedelta(days=1)
+                days_processed += 1
+                
+                # Add sleep to avoid hammering the API
+                import time
+                time.sleep(1)
+            
+            # Prepare response
+            response = {
+                'device_sn': device_sn,
+                'start_date': start_date,
+                'end_date': end_date,
+                'days_analyzed': len(all_results),
+                'results': all_results
+            }
+            
+            # Update task
+            task['status'] = self.TASK_STATUS['COMPLETED']
+            task['result'] = response
+            task['completed_at'] = datetime.now().isoformat()
+            
+        except Exception as e:
+            print(f"Background task error: {str(e)}")
+            if task_id in self.background_tasks:
+                self.background_tasks[task_id]['status'] = self.TASK_STATUS['FAILED']
+                self.background_tasks[task_id]['error'] = str(e)
+                self.background_tasks[task_id]['completed_at'] = datetime.now().isoformat()
