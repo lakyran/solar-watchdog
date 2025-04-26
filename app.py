@@ -396,10 +396,24 @@ def batch_ingest_inverters_history():
                     ingest_result = watchdog.fetch_and_store_device_generation_history(
                         device_sn, current_date, overwrite, store_records)
                     
+                    # Handle case where response is a tuple (error response)
+                    if isinstance(ingest_result, tuple):
+                        error_data, status_code = ingest_result
+                        # Create a standardized error result
+                        ingest_result = {
+                            'device_id': device_sn,
+                            'date': current_date,
+                            'status': 'error',
+                            'error': error_data.get('error', 'Unknown error'),
+                            'status_code': status_code
+                        }
+                        # Break the loop on error
+                        device_results.append(ingest_result)
+                        break
+                    
                     # Add device info to the result
                     ingest_result['user_name'] = inverter.get('user_name', '')
                     ingest_result['device_type'] = inverter.get('device_type', '')
-                    ingest_result['entries_count'] = ingest_result.get('entries_count', 0)
                     
                     # Add to device results
                     device_results.append(ingest_result)
