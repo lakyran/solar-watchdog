@@ -399,6 +399,7 @@ def batch_ingest_inverters_history():
                     # Add device info to the result
                     ingest_result['user_name'] = inverter.get('user_name', '')
                     ingest_result['device_type'] = inverter.get('device_type', '')
+                    ingest_result['entries_count'] = ingest_result.get('entries_count', 0)
                     
                     # Add to device results
                     device_results.append(ingest_result)
@@ -423,6 +424,7 @@ def batch_ingest_inverters_history():
                 
             except Exception as e:
                 # If one inverter fails, continue with others but log the error
+                print(f"Error ingesting history for device {device_sn}: {str(e)}")
                 results.append({
                     'device_id': device_sn,
                     'user_name': inverter.get('user_name', ''),

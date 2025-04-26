@@ -1,0 +1,16 @@
+2025-04-25 16:20:21 - Starting batch ingest job at Fri Apr 25 16:20:21 IST 2025
+2025-04-25 16:20:21 - Calling endpoint: https://unisolartech-watchdog-cua9c4ghegcqcndf.centralindia-01.azurewebsites.net/history/batch-ingest
+2025-04-25 16:20:21 - Batch ingest successful. Processed 3 inverters.
+2025-04-25 16:20:21 - Batch ingest job completed at Fri Apr 25 16:20:21 IST 2025
+2025-04-26 14:34:26 - Starting batch ingest job at Sat Apr 26 14:34:26 IST 2025
+2025-04-26 14:34:26 - Calling endpoint: https://unisolartech-watchdog-cua9c4ghegcqcndf.centralindia-01.azurewebsites.net/history/batch-ingest
+2025-04-26 14:34:29 - Batch ingest successful. Processed 3 inverters.
+2025-04-26 14:34:29 - Batch ingest job completed at Sat Apr 26 14:34:29 IST 2025
+2025-04-26 14:36:45 - Starting batch ingest job at Sat Apr 26 14:36:45 IST 2025
+2025-04-26 14:36:45 - Calling endpoint: https://unisolartech-watchdog-cua9c4ghegcqcndf.centralindia-01.azurewebsites.net/history/batch-ingest
+2025-04-26 14:36:48 - Batch ingest successful. Processed 3 inverters.
+2025-04-26 14:36:48 - Batch ingest job completed at Sat Apr 26 14:36:48 IST 2025
+2025-04-26 14:37:46 - Starting batch ingest job at Sat Apr 26 14:37:46 IST 2025
+2025-04-26 14:37:46 - Calling endpoint: https://unisolartech-watchdog-cua9c4ghegcqcndf.centralindia-01.azurewebsites.net/history/batch-ingest
+2025-04-26 14:37:48 - Batch ingest successful. Processed 3 inverters.
+2025-04-26 14:37:48 - Batch ingest job completed at Sat Apr 26 14:37:48 IST 2025
