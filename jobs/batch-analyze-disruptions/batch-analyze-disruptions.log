@@ -1,0 +1,3 @@
+# Batch Analysis of Disruptions Log
+# This file contains logs for the batch analysis job that processes all inverters
+# Format: YYYY-MM-DD HH:MM:SS - Log message 
