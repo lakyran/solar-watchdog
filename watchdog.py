@@ -168,12 +168,13 @@ class Watchdog:
             
             if not generation_history:
                 self.logger.info(f"No records found for device {device_sn} on {date_str}")
-                return jsonify({
+                print(f"No records found for device {device_sn} on {date_str}")
+                return {
                     'device_id': device_sn,
                     'date': date_str,
                     'status': 'no_data',
                     'message': 'No data available for the requested date'
-                }), 404
+                }
             
             # Prepare analysis query
             query = f"Analyze the solar generation data for device {device_sn} on {date_str}. " \
@@ -375,14 +376,14 @@ class Watchdog:
             self.logger.error(error_msg)
             return {'status': 'error', 'message': error_msg}, 500
 
-    def analyze_device_disruptions_date_range(self, device_sn, start_date, end_date, overwrite=False):
+    def analyze_device_disruptions_date_range(self, device_sn, start_date=None, end_date=None, overwrite=False):
         """
         Creates and manages a background task for analyzing device disruptions over a date range.
         
         Args:
             device_sn (str): Device serial number
-            start_date (str): Start date in YYYY-MM-DD format
-            end_date (str): End date in YYYY-MM-DD format
+            start_date (str, optional): Start date in YYYY-MM-DD format. If None, will be determined based on latest analysis.
+            end_date (str, optional): End date in YYYY-MM-DD format. Defaults to current date if None.
             overwrite (bool, optional): Whether to overwrite existing data. Defaults to False.
             
         Returns:
@@ -390,7 +391,57 @@ class Watchdog:
         """
         import uuid
         import threading
-        from datetime import datetime
+        from datetime import datetime, timedelta
+        
+        # Validate device_sn
+        if not device_sn:
+            return {'status': 'error', 'message': 'device_sn parameter is required'}, 400
+            
+        # Set default end_date to today if not provided
+        if not end_date:
+            end_date = datetime.now().strftime('%Y-%m-%d')
+            
+        # If no start_date provided, determine based on latest analysis date
+        if not start_date:
+            # Try to get the latest analysis date from the database
+            latest_analysis_date = self.get_latest_analysis_date_for_device(device_sn)
+            print(f"Latest analysis date for device {device_sn}: {latest_analysis_date}")
+            self.logger.info(f"Latest analysis date for device {device_sn}: {latest_analysis_date}")
+            
+            if latest_analysis_date:
+                # Parse the date string
+                latest_date = datetime.strptime(latest_analysis_date, '%Y-%m-%d').date()
+                end_date_obj = datetime.strptime(end_date, '%Y-%m-%d').date()
+                
+                if latest_date == end_date_obj:
+                    # Re-analyze is okay for the current day, if after 6am and before 7pm
+                    now = datetime.now()
+                    morning_time = datetime.strptime('06:00', '%H:%M').time()
+                    evening_time = datetime.strptime('19:00', '%H:%M').time()
+                    
+                    if now.time() > morning_time and now.time() < evening_time:
+                        start_date = latest_analysis_date
+                    else:
+                        # Return early if analysis is already done for today and outside operating hours
+                        print(f"Analysis already completed for today and outside operating hours")
+                        return {'status': 'success', 'message': 'Analysis already completed for today'}, 200
+                else:
+                    # Use the day after the latest analysis as the start date
+                    start_date = (latest_date + timedelta(days=1)).strftime('%Y-%m-%d')
+            else:
+                # Default to 15 days before end_date if no previous analysis exists
+                end_date_obj = datetime.strptime(end_date, '%Y-%m-%d')
+                start_date = (end_date_obj - timedelta(days=15)).strftime('%Y-%m-%d')
+        
+        print(f"Analyzing data for device {device_sn} from {start_date} to {end_date}")
+        self.logger.info(f"Analyzing data for device {device_sn} from {start_date} to {end_date}")
+        
+        # Validate date format
+        try:
+            start = datetime.strptime(start_date, '%Y-%m-%d')
+            end = datetime.strptime(end_date, '%Y-%m-%d')
+        except ValueError:
+            return {'status': 'error', 'message': 'Invalid date format. Use YYYY-MM-DD'}, 400
         
         # Create a task ID
         task_id = str(uuid.uuid4())
@@ -406,7 +457,7 @@ class Watchdog:
             'status': self.TASK_STATUS['PENDING'],
             'progress': {
                 'days_processed': 0,
-                'days_total': (datetime.strptime(end_date, '%Y-%m-%d') - datetime.strptime(start_date, '%Y-%m-%d')).days + 1
+                'days_total': (end.date() - start.date()).days + 1
             }
         }
         
@@ -423,6 +474,8 @@ class Watchdog:
             'task_id': task_id,
             'status': 'accepted',
             'message': 'Analysis started in background',
+            'start_date': start_date,
+            'end_date': end_date,
             'check_status_url': f'/tasks/{task_id}'
         }
     
@@ -479,6 +532,8 @@ class Watchdog:
                 if isinstance(result, dict):
                     result['date'] = date_str
                     all_results.append(result)
+
+                print(f"Analyzed {date_str} for device {device_sn}")
                 
                 # Move to next day
                 current_date += timedelta(days=1)
@@ -553,3 +608,45 @@ class Watchdog:
             print(error_msg)
             self.logger.error(error_msg)
             return {"status": "error", "message": error_msg}
+
+    def get_task_status(self, task_id):
+        """
+        Get the status and details of a background task
+        
+        Args:
+            task_id (str): ID of the background task
+            
+        Returns:
+            dict: Task status information or error response
+        """
+        if task_id not in self.background_tasks:
+            return {'status': 'error', 'message': 'Task not found'}, 404
+            
+        task = self.background_tasks[task_id]
+        
+        # If task is completed, include the result
+        if task['status'] == self.TASK_STATUS['COMPLETED']:
+            return {
+                'task_id': task_id,
+                'status': task['status'],
+                'created_at': task['created_at'],
+                'completed_at': task.get('completed_at'),
+                'result': task.get('result')
+            }
+        # If task failed, include the error
+        elif task['status'] == self.TASK_STATUS['FAILED']:
+            return {
+                'task_id': task_id,
+                'status': task['status'],
+                'created_at': task['created_at'],
+                'completed_at': task.get('completed_at'),
+                'error': task.get('error')
+            }
+        # If task is still running, include progress information
+        else:
+            return {
+                'task_id': task_id,
+                'status': task['status'],
+                'created_at': task['created_at'],
+                'progress': task.get('progress', {})
+            }

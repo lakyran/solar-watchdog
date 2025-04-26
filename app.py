@@ -104,46 +104,18 @@ def analyze_device_disruptions_date_range():
         else:
             overwrite = True
         
-        # Validate required parameters
-        if not device_sn:
-            return jsonify({'status': 'error', 'message': 'device_sn parameter is required'}), 400
-        if not end_date:
-            end_date = datetime.now().strftime('%Y-%m-%d')
-        if not start_date:
-            # Try to get the latest analysis date from the database
-            latest_analysis_date = watchdog.get_latest_analysis_date_for_device(device_sn)
-            print(f"Latest analysis date for device {device_sn}: {latest_analysis_date}")
-            if latest_analysis_date:
-                if latest_analysis_date == end_date:
-                    # Re-analyze is okay for the current day, if after 6am and before 7pm
-                    if datetime.now() > datetime.strptime('06:00', '%H:%M') and datetime.now() < datetime.strptime('19:00', '%H:%M'):
-                        start_date = latest_analysis_date
-                    else:
-                        # Use the day after the latest analysis as the start date
-                        return jsonify({'status': 'success', 'message': 'Analysis already completed for today'}), 200
-                else:
-                    # Use the day after the latest analysis as the start date
-                    start_date = (latest_analysis_date + timedelta(days=1)).strftime('%Y-%m-%d')
-            else:
-                # Default to 15 days before end_date if no previous analysis exists
-                start_date = (datetime.now() - timedelta(days=15)).strftime('%Y-%m-%d')
-
-        print(f"Start date: {start_date}")
-        print(f"End date: {end_date}")
-        # Validate date format
-        try:
-            start = datetime.strptime(start_date, '%Y-%m-%d')
-            end = datetime.strptime(end_date, '%Y-%m-%d')
-        except ValueError:
-            return jsonify({'status': 'error', 'message': 'Invalid date format. Use YYYY-MM-DD'}), 400
-            
-        # Check that start date is before end date
-        if start > end:
-            return jsonify({'status': 'error', 'message': 'start_date must be before end_date'}), 400
-            
-        # Delegate to the watchdog service to handle the background task
-        result = watchdog.analyze_device_disruptions_date_range(device_sn, start_date, end_date, overwrite)
+        # Delegate to the watchdog service to handle all logic including date population
+        result = watchdog.analyze_device_disruptions_date_range(
+            device_sn=device_sn, 
+            start_date=start_date, 
+            end_date=end_date, 
+            overwrite=overwrite
+        )
         
+        # If the result is a tuple with status code, handle it
+        if isinstance(result, tuple) and len(result) > 1:
+            return jsonify(result[0]), result[1]
+            
         # Return the result
         return jsonify(result)
         
@@ -153,37 +125,14 @@ def analyze_device_disruptions_date_range():
 @app.route('/tasks/<task_id>', methods=['GET'])
 def get_task_status(task_id):
     """Get the status of a background task"""
-    if task_id not in watchdog.background_tasks:
-        return jsonify({'status': 'error', 'message': 'Task not found'}), 404
-        
-    task = watchdog.background_tasks[task_id]
+    task_status = watchdog.get_task_status(task_id)
     
-    # If task is completed, include the result
-    if task['status'] == watchdog.TASK_STATUS['COMPLETED']:
-        return jsonify({
-            'task_id': task_id,
-            'status': task['status'],
-            'created_at': task['created_at'],
-            'completed_at': task.get('completed_at'),
-            'result': task.get('result')
-        })
-    # If task failed, include the error
-    elif task['status'] == watchdog.TASK_STATUS['FAILED']:
-        return jsonify({
-            'task_id': task_id,
-            'status': task['status'],
-            'created_at': task['created_at'],
-            'completed_at': task.get('completed_at'),
-            'error': task.get('error')
-        })
-    # If task is still running, include progress information
-    else:
-        return jsonify({
-            'task_id': task_id,
-            'status': task['status'],
-            'created_at': task['created_at'],
-            'progress': task.get('progress', {})
-        })
+    # If the result is a tuple with status code, handle it
+    if isinstance(task_status, tuple) and len(task_status) > 1:
+        return jsonify(task_status[0]), task_status[1]
+    
+    # Otherwise return the result as JSON
+    return jsonify(task_status)
 
 @app.route('/device/disruption_events', methods=['GET'])
 def get_device_disruption_events():
@@ -365,6 +314,147 @@ def batch_ingest_inverters_history():
             'total_inverters': len(inverters),
             'processed_inverters': len(results),
             'date': date,
+            'results': results
+        })
+        
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+@app.route('/devices/disruptions/batch-analyze', methods=['GET'])
+def batch_analyze_inverters_disruptions():
+    """Analyze disruptions for all inverters in the database, processing each one sequentially"""
+    try:
+        # Get parameters from request
+        start_date = request.args.get('start_date')
+        end_date = request.args.get('end_date')
+        overwrite = request.args.get('overwrite', 'true')
+        if overwrite.lower() == 'false':
+            overwrite = False
+        else:
+            overwrite = True
+
+        if start_date and end_date and start_date > end_date:
+            return jsonify({'status': 'error', 'message': 'start_date must be before end_date'}), 400
+            
+        # Get the list of all inverters
+        inverters = watchdog.db_client.get_inverters_list()
+        
+        # Track results for each inverter
+        results = []
+        total_inverters = len(inverters)
+        processed_inverters = 0
+        failed_inverters = 0
+        
+        # Process each inverter sequentially
+        for inverter in inverters:
+            device_sn = inverter['device_sn']
+            device_name = inverter.get('user_name', '')
+            
+            print(f"Processing device {device_sn} ({device_name})")
+            
+            try:
+                # Call the existing analyze_device_disruptions_date_range route
+                analysis_result = watchdog.analyze_device_disruptions_date_range(
+                    device_sn=device_sn, 
+                    start_date=start_date, 
+                    end_date=end_date, 
+                    overwrite=overwrite
+                )
+                
+                # If the result is a tuple with an error status code, handle it
+                if isinstance(analysis_result, tuple) and len(analysis_result) > 1:
+                    error_data, status_code = analysis_result
+                    if status_code >= 400:
+                        results.append({
+                            'device_sn': device_sn,
+                            'user_name': device_name,
+                            'status': 'error',
+                            'error': error_data.get('message', 'Unknown error'),
+                            'status_code': status_code
+                        })
+                        failed_inverters += 1
+                        continue
+
+                task_id = analysis_result.get('task_id') if isinstance(analysis_result, dict) else None
+                
+                if task_id:
+                    # Wait for the task to complete before moving to the next inverter
+                    while True:
+                        # Use the watchdog's get_task_status method
+                        task_status = watchdog.get_task_status(task_id)
+                        print(f"Task status: {task_status}")
+                        
+                        # If the result is a tuple with a status code, handle it
+                        if isinstance(task_status, tuple) and len(task_status) > 1:
+                            task_data, status_code = task_status
+                            if status_code == 404:
+                                # Task not found
+                                results.append({
+                                    'device_sn': device_sn,
+                                    'user_name': device_name,
+                                    'status': 'error',
+                                    'error': 'Task not found',
+                                    'task_id': task_id
+                                })
+                                failed_inverters += 1
+                                break
+                        else:
+                            # Normal task data
+                            task_data = task_status
+                            
+                        # Check task status
+                        status = task_data.get('status')
+                        print(f"Task status: {status}")
+                        
+                        if status == watchdog.TASK_STATUS['COMPLETED']:
+                            results.append({
+                                'device_sn': device_sn,
+                                'user_name': device_name,
+                                'status': 'success',
+                                'task_id': task_id,
+                                'task_data': task_data
+                            })
+                            processed_inverters += 1
+                            break
+                        elif status == watchdog.TASK_STATUS['FAILED']:
+                            results.append({
+                                'device_sn': device_sn,
+                                'user_name': device_name,
+                                'status': 'error',
+                                'error': task_data.get('error', 'Task failed'),
+                                'task_id': task_id
+                            })
+                            failed_inverters += 1
+                            break
+                        
+                        # Wait before checking again
+                        time.sleep(2)
+                else:
+                    # No task ID, immediate result
+                    results.append({
+                        'device_sn': device_sn,
+                        'user_name': device_name,
+                        'status': 'success',
+                        'result': analysis_result
+                    })
+                    processed_inverters += 1
+                    
+            except Exception as e:
+                print(f"Error processing device {device_sn}: {str(e)}")
+                results.append({
+                    'device_sn': device_sn,
+                    'user_name': device_name,
+                    'status': 'error',
+                    'error': str(e)
+                })
+                failed_inverters += 1
+        
+        # Return the aggregated results
+        return jsonify({
+            'status': 'success',
+            'total_inverters': total_inverters,
+            'processed_inverters': processed_inverters,
+            'failed_inverters': failed_inverters,
             'results': results
         })
         
