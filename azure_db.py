@@ -2,6 +2,7 @@ import os
 import logging
 from psycopg2 import pool
 import json
+from datetime import datetime
 
 class AzureDB:
     def __init__(self):
@@ -683,6 +684,160 @@ class AzureDB:
             error_msg = f"Database error deleting disruption events: {str(e)}"
             self.logger.error(error_msg)
             raise Exception(error_msg)
+        
+        finally:
+            if cursor:
+                cursor.close()
+            if conn:
+                self.connection_pool.putconn(conn)
+    
+    def get_latest_analysis_date_for_device(self, device_sn):
+        """
+        Retrieve the latest analysis date for a specific device from the analysis_ledger table
+        
+        Args:
+            device_sn (str): Device serial number
+            
+        Returns:
+            str: Date string in YYYY-MM-DD format of the latest analysis or None if no record found
+        """
+        if not self.connection_pool:
+            raise ValueError("Database connection pool not available")
+        
+        conn = None
+        cursor = None
+        
+        try:
+            # Get connection from pool
+            conn = self.connection_pool.getconn()
+            cursor = conn.cursor()
+            
+            # Query to get the latest analysis date for the device
+            cursor.execute(
+                """
+                SELECT TO_CHAR(latest_analysis_date, 'YYYY-MM-DD') as latest_date
+                FROM analysis_ledger 
+                WHERE device_sn = %s
+                ORDER BY latest_analysis_date DESC
+                LIMIT 1
+                """,
+                (device_sn,)
+            )
+            
+            result = cursor.fetchone()
+            
+            if result:
+                return result[0]  # Return the date string
+            else:
+                return None  # No record found
+            
+        except Exception as e:
+            error_msg = f"Database error while getting latest analysis date: {str(e)}"
+            self.logger.error(error_msg)
+            return None
+        
+        finally:
+            if cursor:
+                cursor.close()
+            if conn:
+                self.connection_pool.putconn(conn)
+    
+    def update_analysis_ledger(self, device_sn, analysis_date, device_metadata=None):
+        """
+        Update or insert a record in the analysis_ledger table with the latest analysis date
+        
+        Args:
+            device_sn (str): Device serial number
+            analysis_date (str): Date of analysis in YYYY-MM-DD format
+            device_metadata (dict, optional): Dictionary containing vendor and device_oem. 
+                                             If not provided, will attempt to get from inverters table.
+            
+        Returns:
+            dict: Result of the operation
+        """
+        if not self.connection_pool:
+            raise ValueError("Database connection pool not available")
+        
+        conn = None
+        cursor = None
+        
+        try:
+            # Get connection from pool
+            conn = self.connection_pool.getconn()
+            cursor = conn.cursor()
+            
+            # If device_metadata not provided, get it from inverters table
+            vendor = None
+            device_oem = None
+            
+            if device_metadata:
+                vendor = device_metadata.get('vendor')
+                device_oem = device_metadata.get('device_oem')
+                
+            # Convert string date to timestamp for PostgreSQL
+            try:
+                if isinstance(analysis_date, str):
+                    # Parse date string to datetime
+                    analysis_timestamp = datetime.strptime(analysis_date, '%Y-%m-%d')
+                else:
+                    # Use the provided datetime object
+                    analysis_timestamp = analysis_date
+            except ValueError:
+                return {
+                    "status": "error",
+                    "message": "Invalid date format. Expected YYYY-MM-DD"
+                }
+            
+            # Check if a record already exists
+            cursor.execute(
+                """
+                SELECT 1 FROM analysis_ledger
+                WHERE device_sn = %s AND vendor = %s
+                """,
+                (device_sn, vendor)
+            )
+            
+            record_exists = cursor.fetchone() is not None
+            
+            if record_exists:
+                # Update existing record
+                cursor.execute(
+                    """
+                    UPDATE analysis_ledger
+                    SET device_oem = %s,
+                        latest_analysis_date = %s
+                    WHERE device_sn = %s AND vendor = %s
+                    """,
+                    (device_oem, analysis_timestamp, device_sn, vendor)
+                )
+            else:
+                # Insert new record
+                cursor.execute(
+                    """
+                    INSERT INTO analysis_ledger
+                    (device_sn, vendor, device_oem, latest_analysis_date)
+                    VALUES (%s, %s, %s, %s)
+                    """,
+                    (device_sn, vendor, device_oem, analysis_timestamp)
+                )
+            
+            # Commit the transaction
+            conn.commit()
+            
+            return {
+                "status": "success",
+                "message": f"Analysis ledger {'updated' if record_exists else 'inserted'} for device {device_sn}"
+            }
+            
+        except Exception as e:
+            if conn:
+                conn.rollback()
+            error_msg = f"Database error updating analysis ledger: {str(e)}"
+            self.logger.error(error_msg)
+            return {
+                "status": "error",
+                "message": error_msg
+            }
         
         finally:
             if cursor:

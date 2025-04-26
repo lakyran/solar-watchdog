@@ -76,7 +76,7 @@ def analyze_device_generation_disruptions():
         return jsonify({'error': str(e)}), 500
 
 @app.route('/device/analyze_and_store_disruptions', methods=['GET'])
-def analyze_and_store_disruptions():
+def analyze_and_store_device_disruptions():
     try:
         # Get device_sn and date from request data
         device_sn = request.args.get('device_sn')
@@ -98,14 +98,38 @@ def analyze_device_disruptions_date_range():
         device_sn = request.args.get('device_sn')
         start_date = request.args.get('start_date')
         end_date = request.args.get('end_date')
-        overwrite = request.args.get('overwrite', False)
+        overwrite = request.args.get('overwrite', 'true')
+        if overwrite.lower() == 'false':
+            overwrite = False
+        else:
+            overwrite = True
         
         # Validate required parameters
         if not device_sn:
             return jsonify({'status': 'error', 'message': 'device_sn parameter is required'}), 400
-        if not start_date or not end_date:
-            return jsonify({'status': 'error', 'message': 'Both start_date and end_date parameters are required'}), 400
-            
+        if not end_date:
+            end_date = datetime.now().strftime('%Y-%m-%d')
+        if not start_date:
+            # Try to get the latest analysis date from the database
+            latest_analysis_date = watchdog.get_latest_analysis_date_for_device(device_sn)
+            print(f"Latest analysis date for device {device_sn}: {latest_analysis_date}")
+            if latest_analysis_date:
+                if latest_analysis_date == end_date:
+                    # Re-analyze is okay for the current day, if after 6am and before 7pm
+                    if datetime.now() > datetime.strptime('06:00', '%H:%M') and datetime.now() < datetime.strptime('19:00', '%H:%M'):
+                        start_date = latest_analysis_date
+                    else:
+                        # Use the day after the latest analysis as the start date
+                        return jsonify({'status': 'success', 'message': 'Analysis already completed for today'}), 200
+                else:
+                    # Use the day after the latest analysis as the start date
+                    start_date = (latest_analysis_date + timedelta(days=1)).strftime('%Y-%m-%d')
+            else:
+                # Default to 15 days before end_date if no previous analysis exists
+                start_date = (datetime.now() - timedelta(days=15)).strftime('%Y-%m-%d')
+
+        print(f"Start date: {start_date}")
+        print(f"End date: {end_date}")
         # Validate date format
         try:
             start = datetime.strptime(start_date, '%Y-%m-%d')
@@ -255,7 +279,7 @@ def get_inverters_list():
     except Exception as e:
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
-@app.route('/history/batch-ingest', methods=['GET'])
+@app.route('/devices/history/batch-ingest', methods=['GET'])
 def batch_ingest_inverters_history():
     """Get a list of all inverters and ingest generation history for each one"""
     try:

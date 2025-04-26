@@ -248,6 +248,21 @@ class Watchdog:
             
             # Initialize response data with analysis response
             response_data = analysis_response
+
+            # Get device metadata from inverter records
+            self.logger.info(f"Fetching inverter record for device metadata: {device_sn}")
+            inverter_record = self.db_client.get_inverter_record(device_sn)
+             # Use inverter record for device metadata
+            device_metadata = {
+                'device_sn': inverter_record['device_sn'],
+                'device_type': inverter_record['device_type'],
+                'device_oem': inverter_record['device_oem'],
+                'user_name': inverter_record['user_name'],
+                'user_id': inverter_record['user_id'],
+                'vendor': inverter_record['vendor'],
+                'plant_id': inverter_record['plant_id'],
+                'date': date_str
+            }
             
             # If no disruption events were found, return the response with a note
             if not disruption_events:
@@ -258,14 +273,15 @@ class Watchdog:
                     'skipped_records': 0,
                     'total_processed': 0
                 }
+
+                # Update the analysis ledger with the current date
+                ledger_result = self.update_device_analysis_ledger(device_sn, date_str, device_metadata)
+                response_data['ledger_update'] = ledger_result
+
                 return response_data
             
             # Log that we found disruptions
             self.logger.info(f"Found {len(disruption_events)} disruption events for device {device_sn} on {date_str}")
-            
-            # Get device metadata from inverter records
-            self.logger.info(f"Fetching inverter record for device metadata: {device_sn}")
-            inverter_record = self.db_client.get_inverter_record(device_sn)
             
             # Check if inverter record exists
             if not inverter_record:
@@ -279,20 +295,6 @@ class Watchdog:
                     'total_processed': 0
                 }
                 return response_data
-            
-            # Use inverter record for device metadata
-            device_metadata = {
-                'device_sn': inverter_record['device_sn'],
-                'device_type': inverter_record['device_type'],
-                'device_oem': inverter_record['device_oem'],
-                'user_name': inverter_record['user_name'],
-                'user_id': inverter_record['user_id'],
-                'vendor': inverter_record['vendor'],
-                'plant_id': inverter_record['plant_id']
-            }
-            
-            # Add date to device metadata
-            device_metadata['date'] = date_str
             
             # Insert or update disruption events in the database with ON CONFLICT handling
             db_result = self.db_client.insert_disruption_events(disruption_events, device_metadata)
@@ -308,6 +310,10 @@ class Watchdog:
             
             # Add the database operation result to the response
             response_data['db_operation'] = db_result
+            
+            # Update the analysis ledger with the current date
+            ledger_result = self.update_device_analysis_ledger(device_sn, date_str, device_metadata)
+            response_data['ledger_update'] = ledger_result
             
             # Return the enhanced response
             return response_data
@@ -502,3 +508,48 @@ class Watchdog:
                 self.background_tasks[task_id]['status'] = self.TASK_STATUS['FAILED']
                 self.background_tasks[task_id]['error'] = str(e)
                 self.background_tasks[task_id]['completed_at'] = datetime.now().isoformat()
+
+    def get_latest_analysis_date_for_device(self, device_sn):
+        """
+        Get the latest date when analysis was performed for a device
+        
+        Args:
+            device_sn (str): Device serial number
+            
+        Returns:
+            str: Date string in YYYY-MM-DD format or None if no analysis has been done
+        """
+        try:
+            return self.db_client.get_latest_analysis_date_for_device(device_sn)
+        except Exception as e:
+            self.logger.error(f"Error retrieving latest analysis date for device {device_sn}: {str(e)}")
+            return None
+
+    def update_device_analysis_ledger(self, device_sn, analysis_date, device_metadata=None):
+        """
+        Update the analysis ledger for a device with the latest analysis date
+        
+        Args:
+            device_sn (str): Device serial number
+            analysis_date (str): Date of analysis in YYYY-MM-DD format
+            device_metadata (dict, optional): Device metadata containing vendor and device_oem
+            
+        Returns:
+            dict: Result of the update operation
+        """
+        try:
+            print(f"Updating analysis ledger for device {device_sn} with date {analysis_date}")
+            self.logger.info(f"Updating analysis ledger for device {device_sn} with date {analysis_date}")
+            result = self.db_client.update_analysis_ledger(device_sn, analysis_date, device_metadata)
+            if result.get('status') == 'success':
+                self.logger.info(f"Analysis ledger updated for device {device_sn} with date {analysis_date}")
+                print(f"Analysis ledger updated for device {device_sn} with date {analysis_date}")
+            else:
+                self.logger.warning(f"Failed to update analysis ledger for device {device_sn}: {result.get('message')}")
+                print(f"Failed to update analysis ledger for device {device_sn}: {result.get('message')}")
+            return result
+        except Exception as e:
+            error_msg = f"Error updating analysis ledger for device {device_sn}: {str(e)}"
+            print(error_msg)
+            self.logger.error(error_msg)
+            return {"status": "error", "message": error_msg}
