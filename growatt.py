@@ -76,8 +76,8 @@ class GrowattAPI:
         
         try:
             # self.logger.info(f"Making API request to {url} with params {params}")
-            self.logger.error(f"Making API request to {url} with params {params}")
-            print(f"Making API request to {url} with params {params}")
+            self.logger.error(f"Making API request to {url} with params {params} and headers {headers}")
+            print(f"Making API request to {url} with params {params} and headers {headers}")
             response = requests.request(
                 method=method,
                 url=url,
@@ -100,7 +100,7 @@ class GrowattAPI:
             try:
                 json_response = response.json()
             except json.JSONDecodeError as e:
-                error_msg = f"Failed to parse API response as JSON: {str(e)}. Raw response: {response.text[:500]}"
+                error_msg = f"Failed to parse API response as JSON: {str(e)}. Raw response: {response.text[:500]}, Headers: {response.headers}"
                 self.logger.error(error_msg)
                 raise ValueError(error_msg)
             
