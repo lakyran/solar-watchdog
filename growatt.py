@@ -75,7 +75,9 @@ class GrowattAPI:
         url = f"{self.base_url}{endpoint}"
         
         try:
-            self.logger.info(f"Making API request to {url} with params {params}")
+            # self.logger.info(f"Making API request to {url} with params {params}")
+            self.logger.error(f"Making API request to {url} with params {params}")
+            print(f"Making API request to {url} with params {params}")
             response = requests.request(
                 method=method,
                 url=url,
