@@ -57,7 +57,21 @@ class GrowattAPI:
             )
             response.raise_for_status()  # Raise an exception for bad status codes
             
-            json_response = response.json()
+            # Debug: Log the raw response content
+            self.logger.debug(f"Raw API response: {response.text[:200]}...")
+            
+            # Check if response is empty
+            if not response.text or response.text.isspace():
+                error_msg = "API returned empty response"
+                self.logger.error(error_msg)
+                raise ValueError(error_msg)
+            
+            try:
+                json_response = response.json()
+            except json.JSONDecodeError as e:
+                error_msg = f"Failed to parse API response as JSON: {str(e)}. Raw response: {response.text[:500]}"
+                self.logger.error(error_msg)
+                raise ValueError(error_msg)
             
             # Check if the response has a 'data' field and is successful
             if 'data' not in json_response:
