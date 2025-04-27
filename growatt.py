@@ -62,10 +62,11 @@ class GrowattAPI:
         if not self.api_token:
             raise ValueError("GROWATT_API_TOKEN environment variable is not set")
         
+        user_agent = os.getenv('GROWATT_USER_AGENT', 'PostmanRuntime/7.43.3')
+        
         headers = {
             'Token': f'{self.api_token}',
-            'Content-Type': 'application/json',
-            'User-Agent': 'PostmanRuntime/7.43.3',
+            'User-Agent': user_agent,
             'Accept-Encoding': 'gzip, deflate, br',
             'Connection': 'keep-alive',
             'Accept': '*/*',
@@ -90,6 +91,9 @@ class GrowattAPI:
             
             # Debug: Log the raw response content
             self.logger.debug(f"Raw API response: {response.text[:200]}...")
+            print(f"Raw API response: {response.text[:200]}...")
+            # Print response headers
+            print(f"Response headers: {response.headers}")
             
             # Check if response is empty
             if not response.text or response.text.isspace():
