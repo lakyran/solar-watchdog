@@ -27,6 +27,9 @@ class GrowattAPI:
         Raises:
             Exception: If the API request fails
         """
+        if not self.base_url:
+            raise ValueError("GROWATT_API_URL environment variable is not set")
+        
         if not self.api_token:
             raise ValueError("GROWATT_API_TOKEN environment variable is not set")
         

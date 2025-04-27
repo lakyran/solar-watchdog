@@ -22,6 +22,60 @@ watchdog = Watchdog(app)
 def hello():
     return 'Hello from Azure App Service!'
 
+@app.route('/device/history/test', methods=['GET'])
+def test_growatt_device_history():
+    """Test the Growatt API call to fetch device history without storing it"""
+    try:
+        # Get parameters from request
+        device_sn = request.args.get('device_sn')
+        date_str = request.args.get('date')
+        page = int(request.args.get('page', '1'))
+        
+        # Validate required parameters
+        if not device_sn:
+            return jsonify({'status': 'error', 'message': 'device_sn parameter is required'}), 400
+        if not date_str:
+            return jsonify({'status': 'error', 'message': 'date parameter is required'}), 400
+            
+        # Get device metadata from inverter records
+        inverter_metadata = watchdog.db_client.get_inverter_record(device_sn)
+        
+        # Check if inverter record exists
+        if not inverter_metadata:
+            return jsonify({
+                'status': 'error', 
+                'message': f'No inverter record found for device {device_sn}'
+            }), 404
+        
+        # Call the Growatt API directly to fetch history data without storing it
+        history_data = watchdog.growatt_client.fetch_device_history(
+            device_sn=device_sn,
+            device_metadata=inverter_metadata,
+            start_date=date_str,
+            end_date=date_str,
+            page=page
+        )
+        
+        # Return the raw API response with some additional metadata
+        return jsonify({
+            'status': 'success',
+            'device_sn': device_sn,
+            'date': date_str,
+            'page': page,
+            'device_metadata': {
+                'user_name': inverter_metadata.get('user_name', ''),
+                'device_type': inverter_metadata.get('device_type', ''),
+                'vendor': inverter_metadata.get('vendor', ''),
+                'device_oem': inverter_metadata.get('device_oem', '')
+            },
+            'history_data': history_data
+        })
+        
+    except ValueError as ve:
+        return jsonify({'status': 'error', 'message': str(ve)}), 400
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
 @app.route('/device/history/ingest', methods=['GET'])
 def ingest_device_generation_history():
     try:
