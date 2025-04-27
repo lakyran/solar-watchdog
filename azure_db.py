@@ -2,7 +2,8 @@ import os
 import logging
 from psycopg2 import pool
 import json
-from datetime import datetime
+from datetime import datetime, timezone
+import pytz
 
 class AzureDB:
     def __init__(self):
@@ -15,9 +16,36 @@ class AzureDB:
         self.db_user = os.getenv('POSTGRES_USER')
         self.db_password = os.getenv('POSTGRES_PASSWORD')
         
+        # Define the IST timezone
+        self.ist_timezone = pytz.timezone('Asia/Kolkata')
+        
         # Create connection pool
         self.connection_pool = None
         self.init_connection()
+    
+    def get_current_time_ist(self):
+        """
+        Get the current time in Indian Standard Time (IST)
+        
+        Returns:
+            datetime: Current datetime in IST
+        """
+        return datetime.now(self.ist_timezone)
+    
+    def convert_to_ist(self, dt):
+        """
+        Convert a datetime object to Indian Standard Time
+        
+        Args:
+            dt (datetime): Datetime object to convert
+            
+        Returns:
+            datetime: Datetime object in IST timezone
+        """
+        if dt.tzinfo is None:
+            # If datetime has no timezone, assume it's in UTC
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt.astimezone(self.ist_timezone)
     
     def init_connection(self):
         """Initialize database connection pool"""
@@ -222,6 +250,9 @@ class AzureDB:
             plant_id = device_metadata.get('plant_id', '')
             event_date = device_metadata.get('date', '')
             
+            # Get current timestamp in IST
+            created_at = self.get_current_time_ist().isoformat()
+            
             # Insert each disruption event
             for event in disruption_events:
                 # Handle default values for optional fields
@@ -251,9 +282,9 @@ class AzureDB:
                         plant_id, event_date, start_time, end_time, total_duration, fault_details, 
                         root_cause_analysis, power_generation_during_disruption, 
                         parameters_behaviour_during_disruption, is_ongoing_event, further_action_required)
-                        VALUES (gen_random_uuid(), NOW(), %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                        VALUES (gen_random_uuid(), %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                         ON CONFLICT (device_sn, event_date, start_time) DO UPDATE SET
-                            created_at = NOW(),
+                            created_at = %s,
                             end_time = EXCLUDED.end_time,
                             total_duration = EXCLUDED.total_duration,
                             fault_details = EXCLUDED.fault_details,
@@ -264,6 +295,7 @@ class AzureDB:
                             further_action_required = EXCLUDED.further_action_required
                         """,
                         (
+                            created_at,
                             user_name,
                             user_id,
                             vendor,

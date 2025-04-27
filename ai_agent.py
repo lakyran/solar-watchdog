@@ -5,7 +5,8 @@ from dotenv import load_dotenv
 import json
 import openmeteo_requests
 import requests_cache
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
+import pytz
 import pandas as pd
 import re
 
@@ -25,6 +26,9 @@ class GrowattAIAgent:
         
         # Setup weather API client
         self.weather_client = openmeteo_requests.Client(session=requests_cache.CachedSession('.cache', expire_after=3600))
+        
+        # Define the IST timezone
+        self.ist_timezone = pytz.timezone('Asia/Kolkata')
         
         # Define the agent's tools
         self.tools = [
@@ -70,33 +74,57 @@ class GrowattAIAgent:
                 name="watchdog-solar-agent",
                 instructions="""You are a solar monitoring AI assistant specialized in analyzing solar energy generation and identifying anomalies. Your role is to:
 
-                1. Analyze the provided solar power generation data.
-                2. Identify disruption events or efficiency drops in the data and analyze potential causes.
-                3. Look for the following if a disruption is identified:
-                    a) Drop in grid voltage at the same time, indicating a power cut.
-                    b) Increase in inverter temperature indicating thermal degradation.
-                    c) Refer to the fault code descriptions in the context.
-                4. Report only disruption periods. Consider the duration between start event of disruption to end event as a single reportable event. Once a disruption event starts, till generation is back on track, consider this entire period as a single event. Don't return a disruption event if duration is shorter than 30 minutes.
-                5. Response should be in JSON format. One object for each disruption period. No other section apart from JSON required. No extra whitespace. Pure JSON which should be parseable.
+                1. Analyze the provided solar power generation data.
+                2. Identify disruption events or efficiency drops in the data and analyze potential causes.
+                3. Look for the following if a disruption is identified:
+                    a) Drop in grid voltage at the same time, indicating a power cut.
+                    b) Increase in inverter temperature indicating thermal degradation.
+                    c) Refer to the fault code descriptions in the context.
+                4. Report only disruption periods. Consider the duration between start event of disruption to end event as a single reportable event. Once a disruption event starts, till generation is back on track, consider this entire period as a single event. Don't return a disruption event if duration is shorter than 30 minutes.
+                5. Response should be in JSON format. One object for each disruption period. No other section apart from JSON required. No extra whitespace. Pure JSON which should be parseable.
                 6. Include the following fields for each disruption period: start_time, end_time, total_duration, fault_details, root_cause_analysis, power_generation_during_disruption, parameters_behaviour_during_disruption, is_ongoing_event, further_action_required ignore for ongoing events.
                 7. Value of each key should be in simple english. No nested objects allowed.
-                8. Include only the most relevant information to the disruptions in the report.
+                8. Include only the most relevant information to the disruptions in the report.
 
-                Legend for fields present in the data:
-                    1. status - Standy, Normal or Fault
-                    2. ppv - Power output from panels to inverter
-                    3. pac - Power output from inverter to
-                    4. eacToday - Today's cumulative power generated
-                    5. vac1, vac2, vac3 - Grid/AC connected voltage across 3 phases
-                    6. vpv1, vpv2, vpv3 - Panel/DC connected voltages across multiple inputs
-                    7. temperature - Inverter temperature
-                    8. Fault Type - Fault code of the inverter
+                Legend for fields present in the data:
+                    1. status - Standy, Normal or Fault
+                    2. ppv - Power output from panels to inverter
+                    3. pac - Power output from inverter to
+                    4. eacToday - Today's cumulative power generated
+                    5. vac1, vac2, vac3 - Grid/AC connected voltage across 3 phases
+                    6. vpv1, vpv2, vpv3 - Panel/DC connected voltages across multiple inputs
+                    7. temperature - Inverter temperature
+                    8. Fault Type - Fault code of the inverter
                 """,
             tools=self.tools
         )
         
         # Initialize thread management
         self.active_threads = {}
+    
+    def get_current_time_ist(self):
+        """
+        Get the current time in Indian Standard Time (IST)
+        
+        Returns:
+            datetime: Current datetime in IST
+        """
+        return datetime.now(self.ist_timezone)
+    
+    def convert_to_ist(self, dt):
+        """
+        Convert a datetime object to Indian Standard Time
+        
+        Args:
+            dt (datetime): Datetime object to convert
+            
+        Returns:
+            datetime: Datetime object in IST timezone
+        """
+        if dt.tzinfo is None:
+            # If datetime has no timezone, assume it's in UTC
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt.astimezone(self.ist_timezone)
     
     def get_weather(self, latitude: float, longitude: float, date: str) -> dict:
         """
@@ -116,7 +144,7 @@ class GrowattAIAgent:
         try:
             # Convert date to datetime
             target_date = datetime.strptime(date, "%Y-%m-%d")
-            current_date = datetime.now().date()
+            current_date = self.get_current_time_ist().date()
             
             # Check if the date is in the future
             if target_date.date() > current_date:
@@ -136,7 +164,7 @@ class GrowattAIAgent:
                 "end_date": target_date.strftime("%Y-%m-%d"),
                 "hourly": ["temperature_2m", "cloud_cover", "direct_radiation", "rain", "precipitation"],
                 "daily": ["sunrise", "sunset"],  # Add sunrise and sunset to daily parameters
-                "timezone": "auto"
+                "timezone": "Asia/Kolkata"  # Use IST timezone
             }
             
             responses = self.weather_client.weather_api(url, params=params)

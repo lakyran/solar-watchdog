@@ -1,6 +1,7 @@
 import os
 import json
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
+import pytz
 from flask import jsonify, request
 import logging
 from growatt import GrowattAPI
@@ -29,6 +30,33 @@ class Watchdog:
 
         # Initialize AI agent
         self.ai_agent = GrowattAIAgent()
+        
+        # Define the IST timezone
+        self.ist_timezone = pytz.timezone('Asia/Kolkata')
+    
+    def get_current_time_ist(self):
+        """
+        Get the current time in Indian Standard Time (IST)
+        
+        Returns:
+            datetime: Current datetime in IST
+        """
+        return datetime.now(self.ist_timezone)
+    
+    def convert_to_ist(self, dt):
+        """
+        Convert a datetime object to Indian Standard Time
+        
+        Args:
+            dt (datetime): Datetime object to convert
+            
+        Returns:
+            datetime: Datetime object in IST timezone
+        """
+        if dt.tzinfo is None:
+            # If datetime has no timezone, assume it's in UTC
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt.astimezone(self.ist_timezone)
     
     def fetch_and_store_device_generation_history(self, device_sn, date_str=None, overwrite=False, store_records=False):
         """Route handler for fetching generation history for a device on a date and storing it in the database"""
@@ -45,7 +73,7 @@ class Watchdog:
                     date_str = last_record_date
                     print(f"Last record date found for device {device_sn}: {last_record_date}")
                 else:
-                    today = datetime.now()
+                    today = self.get_current_time_ist()
                     date_str = today.strftime('%Y-%m-%d')
                     print(f"No last record date found for device {device_sn}, using today's date: {date_str}")
 
@@ -79,7 +107,7 @@ class Watchdog:
             if records_count == 0 or overwrite:
                 page = 1
             else:
-                today = datetime.now()
+                today = self.get_current_time_ist()
                 if records_count == total_records_on_day and (dont_change_date or date_str == today.strftime('%Y-%m-%d')):
                     self.logger.info(f"All records for device {device_sn} on {date_str} already exist, skipping fetch and store")
                     print(f"All records for device {device_sn} on {date_str} already exist, skipping fetch and store")
@@ -92,7 +120,9 @@ class Watchdog:
                     }
                     return response
                 elif records_count == total_records_on_day:
-                    date_str = (datetime.strptime(date_str, '%Y-%m-%d') + timedelta(days=1)).strftime('%Y-%m-%d')
+                    date_obj = datetime.strptime(date_str, '%Y-%m-%d')
+                    date_obj = date_obj.replace(tzinfo=self.ist_timezone)
+                    date_str = (date_obj + timedelta(days=1)).strftime('%Y-%m-%d')
                     page = 1
                 else:
                     page = math.floor(len(records) / 100) + 1
@@ -157,7 +187,7 @@ class Watchdog:
         try:
             # Use yesterday if no date provided
             if not date_str:
-                yesterday = datetime.now() - timedelta(days=1)
+                yesterday = self.get_current_time_ist() - timedelta(days=1)
                 date_str = yesterday.strftime('%Y-%m-%d')
             
             self.logger.info(f"Analyzing generation data for device {device_sn} on {date_str}")
@@ -391,7 +421,6 @@ class Watchdog:
         """
         import uuid
         import threading
-        from datetime import datetime, timedelta
         
         # Validate device_sn
         if not device_sn:
@@ -399,7 +428,7 @@ class Watchdog:
             
         # Set default end_date to today if not provided
         if not end_date:
-            end_date = datetime.now().strftime('%Y-%m-%d')
+            end_date = self.get_current_time_ist().strftime('%Y-%m-%d')
             
         # If no start_date provided, determine based on latest analysis date
         if not start_date:
@@ -409,13 +438,13 @@ class Watchdog:
             self.logger.info(f"Latest analysis date for device {device_sn}: {latest_analysis_date}")
             
             if latest_analysis_date:
-                # Parse the date string
-                latest_date = datetime.strptime(latest_analysis_date, '%Y-%m-%d').date()
-                end_date_obj = datetime.strptime(end_date, '%Y-%m-%d').date()
+                # Parse the date string and set timezone to IST
+                latest_date = datetime.strptime(latest_analysis_date, '%Y-%m-%d').replace(tzinfo=self.ist_timezone).date()
+                end_date_obj = datetime.strptime(end_date, '%Y-%m-%d').replace(tzinfo=self.ist_timezone).date()
                 
                 if latest_date == end_date_obj:
                     # Re-analyze is okay for the current day, if after 6am and before 7pm
-                    now = datetime.now()
+                    now = self.get_current_time_ist()
                     morning_time = datetime.strptime('06:00', '%H:%M').time()
                     evening_time = datetime.strptime('19:00', '%H:%M').time()
                     
@@ -430,7 +459,7 @@ class Watchdog:
                     start_date = (latest_date + timedelta(days=1)).strftime('%Y-%m-%d')
             else:
                 # Default to 15 days before end_date if no previous analysis exists
-                end_date_obj = datetime.strptime(end_date, '%Y-%m-%d')
+                end_date_obj = datetime.strptime(end_date, '%Y-%m-%d').replace(tzinfo=self.ist_timezone)
                 start_date = (end_date_obj - timedelta(days=15)).strftime('%Y-%m-%d')
         
         print(f"Analyzing data for device {device_sn} from {start_date} to {end_date}")
@@ -438,8 +467,8 @@ class Watchdog:
         
         # Validate date format
         try:
-            start = datetime.strptime(start_date, '%Y-%m-%d')
-            end = datetime.strptime(end_date, '%Y-%m-%d')
+            start = datetime.strptime(start_date, '%Y-%m-%d').replace(tzinfo=self.ist_timezone)
+            end = datetime.strptime(end_date, '%Y-%m-%d').replace(tzinfo=self.ist_timezone)
         except ValueError:
             return {'status': 'error', 'message': 'Invalid date format. Use YYYY-MM-DD'}, 400
         
@@ -453,7 +482,7 @@ class Watchdog:
             'device_sn': device_sn,
             'start_date': start_date,
             'end_date': end_date,
-            'created_at': datetime.now().isoformat(),
+            'created_at': self.get_current_time_ist().isoformat(),
             'status': self.TASK_STATUS['PENDING'],
             'progress': {
                 'days_processed': 0,
@@ -494,9 +523,9 @@ class Watchdog:
             task = self.background_tasks[task_id]
             task['status'] = self.TASK_STATUS['RUNNING']
             
-            # Convert dates
-            start = datetime.strptime(start_date, '%Y-%m-%d')
-            end = datetime.strptime(end_date, '%Y-%m-%d')
+            # Convert dates with IST timezone
+            start = datetime.strptime(start_date, '%Y-%m-%d').replace(tzinfo=self.ist_timezone)
+            end = datetime.strptime(end_date, '%Y-%m-%d').replace(tzinfo=self.ist_timezone)
             
             # Analyze each day in the range
             current_date = start
@@ -555,14 +584,14 @@ class Watchdog:
             # Update task
             task['status'] = self.TASK_STATUS['COMPLETED']
             task['result'] = response
-            task['completed_at'] = datetime.now().isoformat()
+            task['completed_at'] = self.get_current_time_ist().isoformat()
             
         except Exception as e:
             print(f"Background task error: {str(e)}")
             if task_id in self.background_tasks:
                 self.background_tasks[task_id]['status'] = self.TASK_STATUS['FAILED']
                 self.background_tasks[task_id]['error'] = str(e)
-                self.background_tasks[task_id]['completed_at'] = datetime.now().isoformat()
+                self.background_tasks[task_id]['completed_at'] = self.get_current_time_ist().isoformat()
 
     def get_latest_analysis_date_for_device(self, device_sn):
         """
@@ -595,10 +624,13 @@ class Watchdog:
         try:
             print(f"Updating analysis ledger for device {device_sn} with date {analysis_date}")
             self.logger.info(f"Updating analysis ledger for device {device_sn} with date {analysis_date}")
-            result = self.db_client.update_analysis_ledger(device_sn, analysis_date, device_metadata)
+            # Ensure the analysis_date has IST timezone context
+            date_obj = datetime.strptime(analysis_date, '%Y-%m-%d').replace(tzinfo=self.ist_timezone)
+            formatted_date = date_obj.strftime('%Y-%m-%d')
+            result = self.db_client.update_analysis_ledger(device_sn, formatted_date, device_metadata)
             if result.get('status') == 'success':
-                self.logger.info(f"Analysis ledger updated for device {device_sn} with date {analysis_date}")
-                print(f"Analysis ledger updated for device {device_sn} with date {analysis_date}")
+                self.logger.info(f"Analysis ledger updated for device {device_sn} with date {formatted_date}")
+                print(f"Analysis ledger updated for device {device_sn} with date {formatted_date}")
             else:
                 self.logger.warning(f"Failed to update analysis ledger for device {device_sn}: {result.get('message')}")
                 print(f"Failed to update analysis ledger for device {device_sn}: {result.get('message')}")

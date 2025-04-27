@@ -2,6 +2,8 @@ import requests
 import os
 import logging
 import json
+from datetime import datetime, timezone
+import pytz
 
 class GrowattAPI:
     def __init__(self):
@@ -11,6 +13,33 @@ class GrowattAPI:
         self.base_url = os.getenv('GROWATT_API_URL', '')
         self.api_token = os.getenv('GROWATT_API_TOKEN', '')
         
+        # Define the IST timezone
+        self.ist_timezone = pytz.timezone('Asia/Kolkata')
+    
+    def get_current_time_ist(self):
+        """
+        Get the current time in Indian Standard Time (IST)
+        
+        Returns:
+            datetime: Current datetime in IST
+        """
+        return datetime.now(self.ist_timezone)
+    
+    def convert_to_ist(self, dt):
+        """
+        Convert a datetime object to Indian Standard Time
+        
+        Args:
+            dt (datetime): Datetime object to convert
+            
+        Returns:
+            datetime: Datetime object in IST timezone
+        """
+        if dt.tzinfo is None:
+            # If datetime has no timezone, assume it's in UTC
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt.astimezone(self.ist_timezone)
+    
     def call_api(self, endpoint, method='GET', params=None, data=None):
         """
         Make a request to the Growatt API
@@ -199,10 +228,23 @@ class GrowattAPI:
             for entry in history_data['datas']:
                 # Transform each entry to include only necessary fields based on device type
                 transformed_entry = self.transform_history_entry_by_device_type(entry, device_metadata['device_type'])
+                
+                # Parse datetime and ensure it has IST timezone
+                datetime_str = entry.get('time', '')
+                try:
+                    # First try to parse the datetime string as is
+                    dt_obj = datetime.strptime(datetime_str, '%Y-%m-%d %H:%M:%S')
+                    # Set timezone to IST
+                    dt_obj = dt_obj.replace(tzinfo=self.ist_timezone)
+                    # Format back to string
+                    datetime_str = dt_obj.strftime('%Y-%m-%d %H:%M:%S')
+                except ValueError:
+                    # If parsing fails, keep the original value
+                    pass
 
                 # Create a database-ready entry
                 db_entry = {
-                    'datetime': entry.get('time', ''),
+                    'datetime': datetime_str,
                     'vendor': device_metadata['vendor'],
                     'device_oem': device_metadata['device_oem'],
                     'user_name': device_metadata['user_name'],

@@ -6,6 +6,7 @@ import asyncio
 from watchdog import Watchdog
 import time
 from datetime import datetime, timedelta
+import pytz
 import threading
 import uuid
 
@@ -17,6 +18,18 @@ app = Flask(__name__)
 
 # Initialize the Watchdog object
 watchdog = Watchdog(app)
+
+# Define the IST timezone
+ist_timezone = pytz.timezone('Asia/Kolkata')
+
+def get_current_time_ist():
+    """
+    Get the current time in Indian Standard Time (IST)
+    
+    Returns:
+        datetime: Current datetime in IST
+    """
+    return datetime.now(ist_timezone)
 
 @app.route('/', methods=['GET'])
 def hello():
