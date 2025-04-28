@@ -9,12 +9,15 @@ from datetime import datetime, timedelta, timezone
 import pytz
 import pandas as pd
 import re
+import logging
 
 # Load environment variables
 load_dotenv()
 
 class GrowattAIAgent:
     def __init__(self):
+        self.logger = logging.getLogger(__name__)
+        
         self.project_connection_string = os.getenv('PROJECT_CONNECTION_STRING_AI')
         if not self.project_connection_string:
             raise ValueError("Azure AI Project configuration is missing. Please set PROJECT_CONNECTION_STRING in .env file")
@@ -66,9 +69,9 @@ class GrowattAIAgent:
             # agent_id="asst_zvkxE4kbYsYoYiW6vP8VrHSz" # GPT-4o-mini
         )
         if self.agent:
-            print(f"Existing agent found")
+            self.logger.info("Existing agent found")
         else:
-            print(f"Agent not found. Creating new agent")
+            self.logger.info("Agent not found. Creating new agent")
             self.agent = self.project_client.agents.create_agent(
                 model="gpt-4o",  # or your preferred model
                 name="watchdog-solar-agent",
@@ -236,6 +239,7 @@ class GrowattAIAgent:
                 json_str = json_str.replace('```json', '').replace('```', '')
                 json_data = json.loads(json_str)
                 if isinstance(json_data, list):
+                    self.logger.debug(f"Extracted JSON using specialized parser: {json_data}")
                     return json_data
             except json.JSONDecodeError:
                 pass
@@ -293,7 +297,6 @@ class GrowattAIAgent:
             # First try to use our specialized JSON extractor
             json_data = self._extract_json_from_llm_response(markdown_text)
             if json_data:
-                print(f"Extracted JSON using specialized parser: {json_data}")
                 return json_data
                 
             # First, check if the response already contains a valid JSON array enclosed in []
@@ -303,16 +306,16 @@ class GrowattAIAgent:
                     json_str = json_match.group(0)
                     json_data = json.loads(json_str)
                     if isinstance(json_data, list) and len(json_data) > 0:
-                        print(f"Found and parsed JSON array: {json_data}")
+                        self.logger.debug(f"Found and parsed JSON array: {json_data}")
                         return json_data
                 except json.JSONDecodeError as e:
-                    print(f"Found JSON-like structure but couldn't parse: {e}")
+                    self.logger.warning(f"Found JSON-like structure but couldn't parse: {e}")
                     pass
 
             # Try to parse the entire string as JSON
             try:
                 json_data = json.loads(markdown_text)
-                print(f"Parsed entire response as JSON: {json_data}")
+                self.logger.debug(f"Parsed entire response as JSON: {json_data}")
                 return json_data
             except json.JSONDecodeError:
                 pass
@@ -380,7 +383,7 @@ class GrowattAIAgent:
             return disruption_events
             
         except Exception as e:
-            print(f"Error parsing markdown to JSON: {str(e)}")
+            self.logger.error(f"Error parsing markdown to JSON: {str(e)}")
             # Return original text as fallback
             return {"analysis": markdown_text, "parse_error": str(e)}
     
@@ -434,7 +437,7 @@ class GrowattAIAgent:
         Returns:
             dict: Response containing the AI's answer and any relevant data
         """
-        print("Entered process query")
+        self.logger.info("Entered process query")
         try:
             # Create a new thread or use existing one from context
             thread_id = context.get('thread_id') if context else None
@@ -448,8 +451,8 @@ class GrowattAIAgent:
             if context:
                 full_message = f"User Query: {user_query} \n\n Context as JSON format: {json.dumps(context)}"
 
-            print(f"Full Message length: {len(full_message)}")
-            # print(f"Full Message: {full_message}")
+            self.logger.debug(f"Full Message length: {len(full_message)}")
+            # self.logger.debug(f"Full Message: {full_message}")
             
             # Create message in the thread
             message = self.project_client.agents.create_message(
@@ -458,16 +461,16 @@ class GrowattAIAgent:
                 content=full_message
             )
             
-            print(f"Invoking AI agent")
+            self.logger.info(f"Invoking AI agent")
             # Create and process a run
             run = self.project_client.agents.create_and_process_run(
                 thread_id=thread_id,
                 agent_id=self.agent.id
             )
-            print(f"Run finished with status: {run.status}")
+            self.logger.info(f"Run finished with status: {run.status}")
             if run.status == "failed":
                 # Check if you got "Rate limit is exceeded.", then you want to get more quota
-                print(f"Run failed: {run.last_error}")
+                self.logger.error(f"Run failed: {run.last_error}")
             
             # Wait for the run to complete and get messages
             messages = self.project_client.agents.list_messages(thread_id=thread_id)
@@ -475,7 +478,7 @@ class GrowattAIAgent:
             # Get the latest assistant message
             last_msg = messages.get_last_text_message_by_role("assistant")
             if last_msg:
-                print(f"Last Message: {last_msg.text.value}")
+                self.logger.debug(f"Last Message: {last_msg.text.value}")
             
             # Get the response text
             response_text = last_msg.text.value if last_msg else "No response generated"
@@ -489,11 +492,11 @@ class GrowattAIAgent:
             
             # Try to extract JSON from the response text
             disruption_events = self._parse_markdown_to_json(response_text)
-            print(f"Disruption events count before pruning: {len(disruption_events)}")
+            self.logger.info(f"Disruption events count before pruning: {len(disruption_events)}")
 
             # Prune disruption events to remove events that have duration less than 30 minutes
             disruption_events = self._prune_short_disruption_events(disruption_events)
-            print(f"Disruption events count after pruning: {len(disruption_events)}")
+            self.logger.info(f"Disruption events count after pruning: {len(disruption_events)}")
             
             # Update the response with any disruption events found
             if isinstance(disruption_events, list) and disruption_events:
@@ -505,7 +508,7 @@ class GrowattAIAgent:
             return response
             
         except Exception as e:
-            print(f"Entered exception: {e}")
+            self.logger.error(f"Exception in process_query: {e}")
             return {
                 "error": str(e),
                 "status": "error"

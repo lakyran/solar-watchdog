@@ -3,11 +3,20 @@
 Test script to verify Azure authentication using EnvironmentCredential
 """
 import os
+import logging
 from dotenv import load_dotenv
 from azure.identity import EnvironmentCredential
 
 # Import the GrowattAIAgent class
 from ai_agent import GrowattAIAgent
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - [%(filename)s:%(lineno)d] - %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S'
+)
+logger = logging.getLogger(__name__)
 
 def main():
     """
@@ -17,41 +26,41 @@ def main():
     load_dotenv()
     
     # Check if environment variables are set
-    print("Checking Azure environment variables...")
+    logger.info("Checking Azure environment variables...")
     required_env_vars = ['AZURE_TENANT_ID', 'AZURE_CLIENT_ID', 'AZURE_CLIENT_SECRET', 'PROJECT_CONNECTION_STRING_AI']
     missing_vars = [var for var in required_env_vars if not os.getenv(var)]
     
     if missing_vars:
-        print(f"Error: The following environment variables are missing: {', '.join(missing_vars)}")
-        print("Please set them in the .env file or in your environment.")
+        logger.error(f"Error: The following environment variables are missing: {', '.join(missing_vars)}")
+        logger.error("Please set them in the .env file or in your environment.")
         return
     
-    print("Environment variables are set.")
+    logger.info("Environment variables are set.")
     
     # Test EnvironmentCredential
     try:
-        print("Testing EnvironmentCredential...")
+        logger.info("Testing EnvironmentCredential...")
         credential = EnvironmentCredential()
-        print("EnvironmentCredential initialized successfully.")
+        logger.info("EnvironmentCredential initialized successfully.")
         
         # Test GrowattAIAgent initialization
-        print("Testing GrowattAIAgent initialization...")
+        logger.info("Testing GrowattAIAgent initialization...")
         agent = GrowattAIAgent()
-        print("GrowattAIAgent initialized successfully.")
+        logger.info("GrowattAIAgent initialized successfully.")
         
         # Check if the agent was found or created
         if agent.agent:
-            print("Agent status: Ready")
-            print(f"Agent ID: {agent.agent.id}")
-            print(f"Agent Name: {agent.agent.name}")
-            print(f"Agent Model: {agent.agent.model}")
+            logger.info("Agent status: Ready")
+            logger.info(f"Agent ID: {agent.agent.id}")
+            logger.info(f"Agent Name: {agent.agent.name}")
+            logger.info(f"Agent Model: {agent.agent.model}")
         else:
-            print("Agent status: Not initialized correctly")
+            logger.warning("Agent status: Not initialized correctly")
             
-        print("Authentication test completed successfully.")
+        logger.info("Authentication test completed successfully.")
         
     except Exception as e:
-        print(f"Error during authentication test: {str(e)}")
+        logger.error(f"Error during authentication test: {str(e)}")
         
 if __name__ == "__main__":
     main() 

@@ -1,5 +1,6 @@
 from flask import Flask, jsonify, request, render_template
 import os
+import logging
 from dotenv import load_dotenv
 from ai_agent import GrowattAIAgent
 import asyncio
@@ -9,6 +10,15 @@ from datetime import datetime, timedelta
 import pytz
 import threading
 import uuid
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - [%(filename)s:%(lineno)d] - %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S'
+)
+logger = logging.getLogger(__name__)
+logger.info("Starting Unisolar Watchdog Service")
 
 # Load environment variables
 load_dotenv()
@@ -237,7 +247,7 @@ def view_device_disruption_events():
         try:
             inverters = watchdog.db_client.get_inverters_list()
         except Exception as e:
-            print(f"Error fetching inverters list: {str(e)}")
+            logger.error(f"Error fetching inverters list: {str(e)}")
             inverters = []
         
         # Validate that device_sn is provided
@@ -365,7 +375,7 @@ def batch_ingest_inverters_history():
                 
             except Exception as e:
                 # If one inverter fails, continue with others but log the error
-                print(f"Error ingesting history for device {device_sn}: {str(e)}")
+                logger.error(f"Error ingesting history for device {device_sn}: {str(e)}")
                 results.append({
                     'device_id': device_sn,
                     'user_name': inverter.get('user_name', ''),
@@ -417,7 +427,7 @@ def batch_analyze_inverters_disruptions():
             device_sn = inverter['device_sn']
             device_name = inverter.get('user_name', '')
             
-            print(f"Processing device {device_sn} ({device_name})")
+            logger.info(f"Processing device {device_sn} ({device_name})")
             
             try:
                 # Call the existing analyze_device_disruptions_date_range route
@@ -449,7 +459,7 @@ def batch_analyze_inverters_disruptions():
                     while True:
                         # Use the watchdog's get_task_status method
                         task_status = watchdog.get_task_status(task_id)
-                        print(f"Task status: {task_status}")
+                        logger.debug(f"Task status: {task_status}")
                         
                         # If the result is a tuple with a status code, handle it
                         if isinstance(task_status, tuple) and len(task_status) > 1:
@@ -471,7 +481,7 @@ def batch_analyze_inverters_disruptions():
                             
                         # Check task status
                         status = task_data.get('status')
-                        print(f"Task status: {status}")
+                        logger.debug(f"Task status: {status}")
                         
                         if status == watchdog.TASK_STATUS['COMPLETED']:
                             results.append({
@@ -507,7 +517,7 @@ def batch_analyze_inverters_disruptions():
                     processed_inverters += 1
                     
             except Exception as e:
-                print(f"Error processing device {device_sn}: {str(e)}")
+                logger.error(f"Error processing device {device_sn}: {str(e)}")
                 results.append({
                     'device_sn': device_sn,
                     'user_name': device_name,

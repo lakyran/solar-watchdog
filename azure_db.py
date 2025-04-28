@@ -7,6 +7,7 @@ import pytz
 
 class AzureDB:
     def __init__(self):
+        # Set up logger for this class
         self.logger = logging.getLogger(__name__)
         
         # Database Configuration
@@ -15,6 +16,11 @@ class AzureDB:
         self.db_name = os.getenv('POSTGRES_DB')
         self.db_user = os.getenv('POSTGRES_USER')
         self.db_password = os.getenv('POSTGRES_PASSWORD')
+        
+        # Check if required database environment variables are set
+        if not self.db_host or not self.db_name or not self.db_user or not self.db_password:
+            self.logger.error("Missing database configuration environment variables")
+            raise ValueError("Database configuration is missing. Please check your environment variables.")
         
         # Define the IST timezone
         self.ist_timezone = pytz.timezone('Asia/Kolkata')
@@ -74,6 +80,7 @@ class AzureDB:
             dict: Result of the operation with count of inserted records
         """
         if not self.connection_pool:
+            self.logger.error("Database connection pool not available")
             raise ValueError("Database connection pool not available")
         
         conn = None
@@ -84,6 +91,8 @@ class AzureDB:
             # Get connection from pool
             conn = self.connection_pool.getconn()
             cursor = conn.cursor()
+            
+            self.logger.debug(f"Attempting to insert {len(entries)} records into database")
             
             # Insert entries into database table
             for entry in entries:
@@ -142,6 +151,8 @@ class AzureDB:
             # Commit the transaction
             conn.commit()
             
+            self.logger.info(f"Successfully inserted {inserted_count} records into database")
+            
             return {
                 "status": "success",
                 "inserted_records": inserted_count
@@ -150,6 +161,7 @@ class AzureDB:
         except Exception as e:
             if conn:
                 conn.rollback()
+            self.logger.error(f"Database error during insertion: {e}")
             raise Exception(f"Database error: {str(e)}")
         
         finally:
@@ -170,6 +182,7 @@ class AzureDB:
             list: List of records for the device on the specified date
         """
         if not self.connection_pool:
+            self.logger.error("Database connection pool not available")
             raise ValueError("Database connection pool not available")
         
         conn = None
@@ -179,6 +192,8 @@ class AzureDB:
             # Get connection from pool
             conn = self.connection_pool.getconn()
             cursor = conn.cursor()
+            
+            self.logger.debug(f"Querying records for device {device_sn} on date {date}")
             
             # Query to get all records for the device on the specified date
             cursor.execute(
@@ -202,6 +217,7 @@ class AzureDB:
                 record = dict(zip(column_names, row))
                 records.append(record)
             
+            self.logger.info(f"Retrieved {len(records)} records for device {device_sn} on date {date}")
             return records
             
         except Exception as e:
@@ -227,6 +243,7 @@ class AzureDB:
             dict: Result of the operation with count of inserted records
         """
         if not self.connection_pool:
+            self.logger.error("Database connection pool not available")
             raise ValueError("Database connection pool not available")
         
         conn = None
@@ -239,6 +256,8 @@ class AzureDB:
             # Get connection from pool
             conn = self.connection_pool.getconn()
             cursor = conn.cursor()
+            
+            self.logger.debug(f"Attempting to insert {len(disruption_events)} disruption events")
             
             # Extract metadata fields with defaults for missing values
             user_name = device_metadata.get('user_name', '')
@@ -364,6 +383,7 @@ class AzureDB:
             dict: Inverter record or None if not found
         """
         if not self.connection_pool:
+            self.logger.error("Database connection pool not available")
             raise ValueError("Database connection pool not available")
         
         conn = None
@@ -373,6 +393,8 @@ class AzureDB:
             # Get connection from pool
             conn = self.connection_pool.getconn()
             cursor = conn.cursor()
+            
+            self.logger.debug(f"Querying inverter record for device_sn: {device_sn}")
             
             # Query to get inverter record by device_sn
             cursor.execute(
@@ -391,11 +413,13 @@ class AzureDB:
             # Fetch the first matching record
             row = cursor.fetchone()
             if not row:
+                self.logger.warning(f"No inverter record found for device_sn: {device_sn}")
                 return None
                 
             # Convert row to dictionary
             inverter_record = dict(zip(column_names, row))
             
+            self.logger.info(f"Retrieved inverter record for device_sn: {device_sn}")
             return inverter_record
             
         except Exception as e:
@@ -421,6 +445,7 @@ class AzureDB:
             list: List of disruption events for the device
         """
         if not self.connection_pool:
+            self.logger.error("Database connection pool not available")
             raise ValueError("Database connection pool not available")
         
         conn = None
@@ -430,6 +455,11 @@ class AzureDB:
             # Get connection from pool
             conn = self.connection_pool.getconn()
             cursor = conn.cursor()
+            
+            if date:
+                self.logger.debug(f"Querying disruption events for device {device_sn} on date {date}")
+            else:
+                self.logger.debug(f"Querying all disruption events for device {device_sn}")
             
             # Prepare the query based on whether date is provided
             if date:
@@ -502,6 +532,7 @@ class AzureDB:
                 event = dict(zip(column_names, row))
                 disruption_events.append(event)
             
+            self.logger.info(f"Retrieved {len(disruption_events)} disruption events for device {device_sn}")
             return disruption_events
             
         except Exception as e:
@@ -526,6 +557,7 @@ class AzureDB:
             str: Date of the last record in YYYY-MM-DD format, or None if no records exist
         """
         if not self.connection_pool:
+            self.logger.error("Database connection pool not available")
             raise ValueError("Database connection pool not available")
         
         conn = None
@@ -535,6 +567,8 @@ class AzureDB:
             # Get connection from pool
             conn = self.connection_pool.getconn()
             cursor = conn.cursor()
+            
+            self.logger.debug(f"Querying last record date for device: {device_sn}")
             
             # Query to get the most recent date for the device
             cursor.execute(
@@ -549,8 +583,10 @@ class AzureDB:
             # Fetch the result
             result = cursor.fetchone()
             if result:
+                self.logger.info(f"Last record date for device {device_sn}: {result[0]}")
                 return result[0]  # Return the date string
             else:
+                self.logger.info(f"No records found for device {device_sn}")
                 return None  # No records found
             
         except Exception as e:
@@ -576,6 +612,7 @@ class AzureDB:
             dict: Result of the operation with count of deleted records
         """
         if not self.connection_pool:
+            self.logger.error("Database connection pool not available")
             raise ValueError("Database connection pool not available")
         
         conn = None
@@ -585,6 +622,8 @@ class AzureDB:
             # Get connection from pool
             conn = self.connection_pool.getconn()
             cursor = conn.cursor()
+            
+            self.logger.debug(f"Deleting records for device {device_sn} on date {date}")
             
             # Query to delete all records for the device on the specified date
             cursor.execute(
@@ -600,6 +639,8 @@ class AzureDB:
             
             # Commit the transaction
             conn.commit()
+            
+            self.logger.info(f"Deleted {deleted_count} records for device {device_sn} on date {date}")
             
             return {
                 "status": "success",
@@ -627,6 +668,7 @@ class AzureDB:
             list: A list of dictionaries containing device_sn and user_name for each inverter
         """
         if not self.connection_pool:
+            self.logger.error("Database connection pool not available")
             raise ValueError("Database connection pool not available")
         
         conn = None
@@ -636,6 +678,8 @@ class AzureDB:
             # Get connection from pool
             conn = self.connection_pool.getconn()
             cursor = conn.cursor()
+            
+            self.logger.debug("Querying list of all inverters")
             
             # Query to get all distinct inverters
             cursor.execute(
@@ -655,6 +699,7 @@ class AzureDB:
                 inverter = dict(zip(column_names, row))
                 inverters.append(inverter)
                 
+            self.logger.info(f"Retrieved {len(inverters)} inverters from database")
             return inverters
             
         except Exception as e:
@@ -680,6 +725,7 @@ class AzureDB:
             dict: Result of the operation with count of deleted records
         """
         if not self.connection_pool:
+            self.logger.error("Database connection pool not available")
             raise ValueError("Database connection pool not available")
         
         conn = None
@@ -689,6 +735,8 @@ class AzureDB:
             # Get connection from pool
             conn = self.connection_pool.getconn()
             cursor = conn.cursor()
+            
+            self.logger.debug(f"Deleting disruption events for device {device_sn} on date {date}")
             
             # Query to delete all disruption events for the device on the specified date
             cursor.execute(
@@ -704,6 +752,8 @@ class AzureDB:
             
             # Commit the transaction
             conn.commit()
+            
+            self.logger.info(f"Deleted {deleted_count} disruption events for device {device_sn} on date {date}")
             
             return {
                 "status": "success",
@@ -734,6 +784,7 @@ class AzureDB:
             str: Date string in YYYY-MM-DD format of the latest analysis or None if no record found
         """
         if not self.connection_pool:
+            self.logger.error("Database connection pool not available")
             raise ValueError("Database connection pool not available")
         
         conn = None
@@ -743,6 +794,8 @@ class AzureDB:
             # Get connection from pool
             conn = self.connection_pool.getconn()
             cursor = conn.cursor()
+            
+            self.logger.debug(f"Querying latest analysis date for device {device_sn}")
             
             # Query to get the latest analysis date for the device
             cursor.execute(
@@ -759,8 +812,10 @@ class AzureDB:
             result = cursor.fetchone()
             
             if result:
+                self.logger.info(f"Latest analysis date for device {device_sn}: {result[0]}")
                 return result[0]  # Return the date string
             else:
+                self.logger.info(f"No analysis record found for device {device_sn}")
                 return None  # No record found
             
         except Exception as e:
@@ -788,6 +843,7 @@ class AzureDB:
             dict: Result of the operation
         """
         if not self.connection_pool:
+            self.logger.error("Database connection pool not available")
             raise ValueError("Database connection pool not available")
         
         conn = None
@@ -797,6 +853,8 @@ class AzureDB:
             # Get connection from pool
             conn = self.connection_pool.getconn()
             cursor = conn.cursor()
+            
+            self.logger.debug(f"Updating analysis ledger for device {device_sn} with date {analysis_date}")
             
             # If device_metadata not provided, get it from inverters table
             vendor = None
@@ -815,9 +873,11 @@ class AzureDB:
                     # Use the provided datetime object
                     analysis_timestamp = analysis_date
             except ValueError:
+                error_msg = "Invalid date format. Expected YYYY-MM-DD"
+                self.logger.error(error_msg)
                 return {
                     "status": "error",
-                    "message": "Invalid date format. Expected YYYY-MM-DD"
+                    "message": error_msg
                 }
             
             # Check if a record already exists
@@ -832,6 +892,7 @@ class AzureDB:
             record_exists = cursor.fetchone() is not None
             
             if record_exists:
+                self.logger.debug(f"Existing record found for device {device_sn}, updating analysis date to {analysis_date}")
                 # Update existing record
                 cursor.execute(
                     """
@@ -842,7 +903,9 @@ class AzureDB:
                     """,
                     (device_oem, analysis_timestamp, device_sn, vendor)
                 )
+                self.logger.info(f"Updated analysis ledger for device {device_sn} with date {analysis_date}")
             else:
+                self.logger.debug(f"No existing record found for device {device_sn}, creating new entry")
                 # Insert new record
                 cursor.execute(
                     """
@@ -852,6 +915,7 @@ class AzureDB:
                     """,
                     (device_sn, vendor, device_oem, analysis_timestamp)
                 )
+                self.logger.info(f"Created new analysis ledger entry for device {device_sn} with date {analysis_date}")
             
             # Commit the transaction
             conn.commit()

@@ -2,8 +2,16 @@ import requests
 import os
 import logging
 import json
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 import pytz
+import time
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
+
+# Define the IST timezone
+IST_TIMEZONE = pytz.timezone('Asia/Kolkata')
 
 class GrowattAPI:
     def __init__(self):
@@ -12,9 +20,9 @@ class GrowattAPI:
         # Growatt API configuration
         self.base_url = os.getenv('GROWATT_API_URL', '')
         self.api_token = os.getenv('GROWATT_API_TOKEN', '')
-        
+
         # Define the IST timezone
-        self.ist_timezone = pytz.timezone('Asia/Kolkata')
+        self.ist_timezone = IST_TIMEZONE
     
     def get_current_time_ist(self):
         """
@@ -77,8 +85,7 @@ class GrowattAPI:
         
         try:
             # self.logger.info(f"Making API request to {url} with params {params}")
-            self.logger.error(f"Making API request to {url} with params {params} and headers {headers}")
-            print(f"Making API request to {url} with params {params} and headers {headers}")
+            self.logger.debug(f"Making API request to {url} with params {params} and headers {headers}")
             response = requests.request(
                 method=method,
                 url=url,
@@ -91,9 +98,7 @@ class GrowattAPI:
             
             # Debug: Log the raw response content
             self.logger.debug(f"Raw API response: {response.text[:200]}...")
-            print(f"Raw API response: {response.text[:200]}...")
-            # Print response headers
-            print(f"Response headers: {response.headers}")
+            self.logger.debug(f"Response headers: {response.headers}")
             
             # Check if response is empty
             if not response.text or response.text.isspace():
@@ -227,7 +232,7 @@ class GrowattAPI:
         
         if 'count' in history_data:
             total_records_on_day = history_data['count']
-            print(f"Total records on day {date_str} for device {device_sn}: {total_records_on_day}")
+            self.logger.info(f"Total records on day {date_str} for device {device_sn}: {total_records_on_day}")
         
         # Extract relevant data from history_data
         if 'datas' in history_data and isinstance(history_data['datas'], list):

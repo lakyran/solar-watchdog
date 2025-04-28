@@ -1,4 +1,4 @@
-# Unisolar Watchdog Service
+# Solar Watchdog Service
 
 A monitoring and analysis service for solar power generation systems that ingests data from Growatt inverters, stores it in a database, analyzes generation patterns, and identifies disruption events.
 
