@@ -339,7 +339,14 @@ class Watchdog:
             # Insert or update disruption events in the database with ON CONFLICT handling
             db_result = self.db_client.insert_disruption_events(disruption_events, device_metadata)
             
-            # Enhanced logging for better visibility of conflict resolution
+            # Check if operation failed
+            if db_result.get('status') == 'error':
+                error_msg = f"Failed to store disruption events: {db_result.get('message')}"
+                self.logger.error(error_msg)
+                response_data['db_operation'] = db_result
+                return response_data, 500
+            
+            # Enhanced logging for successful operations
             self.logger.info(
                 f"Processed disruption events for {device_sn} on {date_str}: "
                 f"Inserted {db_result.get('inserted_records', 0)}, "

@@ -303,7 +303,6 @@ class AzureDB:
                         parameters_behaviour_during_disruption, is_ongoing_event, further_action_required)
                         VALUES (gen_random_uuid(), %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                         ON CONFLICT (device_sn, event_date, start_time) DO UPDATE SET
-                            created_at = %s,
                             end_time = EXCLUDED.end_time,
                             total_duration = EXCLUDED.total_duration,
                             fault_details = EXCLUDED.fault_details,
@@ -344,11 +343,21 @@ class AzureDB:
                         self.logger.info(f"Inserted new disruption event for {device_sn} on {event_date} starting at {event.get('start_time', '')}")
                     
                 except Exception as insert_error:
-                    # If there's an error during insertion, log it and continue with other events
-                    self.logger.warning(f"Error processing disruption event: {str(insert_error)}")
-                    skipped_count += 1
-                    continue
+                    # Log the error and return failed status
+                    error_msg = f"Error processing disruption event: {str(insert_error)}"
+                    self.logger.error(error_msg)
+                    if conn:
+                        conn.rollback()
+                    return {
+                        "status": "error",
+                        "message": error_msg,
+                        "inserted_records": inserted_count,
+                        "updated_records": updated_count,
+                        "skipped_records": skipped_count,
+                        "total_processed": inserted_count + updated_count + skipped_count
+                    }
             
+            # If we get here, all events were processed successfully
             # Commit the transaction
             conn.commit()
             
