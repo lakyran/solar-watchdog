@@ -59,13 +59,25 @@ class Watchdog:
         return dt.astimezone(self.ist_timezone)
     
     def fetch_and_store_device_generation_history(self, device_sn, date_str=None, overwrite=False, store_records=False):
-        """Route handler for fetching generation history for a device on a date and storing it in the database"""
+        """Fetch generation history for a device on a date and store it in the database"""
         # device_sn = 'CLJACLR001', 'CZGBCL2141', 'CZGME630L4' 
         # user_name = 'blossomcity', 'veeraiah', 'vijayavani3kw'
 
         try:
-            # If date not provided, fetch the date of the last record in the database. If no records, then use yesterday
+            today = self.get_current_time_ist()
+            evening_time = datetime.strptime('19:00', '%H:%M').time()
+
+            # Get device metadata from inverter records
+            self.logger.info(f"Fetching inverter record for device metadata: {device_sn}")
+            inverter_metadata = self.db_client.get_inverter_record(device_sn)
+            # Check if inverter record exists
+            if not inverter_metadata:
+                error_msg = f"No inverter record found for device {device_sn}, cannot proceed with fetching generation history"
+                self.logger.warning(error_msg)
+                raise Exception(error_msg)
+
             dont_change_date = True
+            # If date not provided, fetch the date of the last record in the database. If no records, then use today
             if not date_str:
                 dont_change_date = False
                 last_record_date = self.db_client.get_last_record_date_for_device(device_sn)
@@ -73,7 +85,6 @@ class Watchdog:
                     date_str = last_record_date
                     self.logger.info(f"Last record date found for device {device_sn}: {last_record_date}")
                 else:
-                    today = self.get_current_time_ist()
                     date_str = today.strftime('%Y-%m-%d')
                     self.logger.info(f"No last record date found for device {device_sn}, using today's date: {date_str}")
 
@@ -86,9 +97,9 @@ class Watchdog:
             if records_count > 0:
                 total_records_on_day = records[0]['total_records_on_day']
                 self.logger.info(f"Total records on day {date_str} for device {device_sn}: {total_records_on_day}")
-            
-            # If records exist and overwrite is True, then first delete the records for the device and date
-            if records_count > 0 and overwrite:
+
+            # If records exist and overwrite is True or date is today, then first delete the records for the device and date
+            if records_count > 0 and (overwrite or date_str == today.strftime('%Y-%m-%d')):
                 self.logger.info(f"Deleting records for device {device_sn} on {date_str}")
                 db_result = self.db_client.delete_device_records_by_date(device_sn, date_str)
                 if db_result['status'] == 'success':
@@ -97,65 +108,65 @@ class Watchdog:
                     error_msg = f"Error deleting records for device {device_sn} on {date_str}: {db_result['message']}"
                     self.logger.error(error_msg)
                     raise Exception(error_msg)
-            
-            # If records exist and overwrite is false, then decide the page
-            # based on number of records and total records for that day. 100 records per page
-            page = 1
-            if records_count == 0 or overwrite:
-                page = 1
-            else:
-                today = self.get_current_time_ist()
-                if records_count == total_records_on_day and (dont_change_date or date_str == today.strftime('%Y-%m-%d')):
-                    self.logger.info(f"All records for device {device_sn} on {date_str} already exist, skipping fetch and store")
-                    response = {
-                        'device_id': device_sn,
-                        'date': date_str,
-                        'entries_count': len(records),
-                        'db_operation': None,
-                        'status': 'skipped'
-                    }
-                    return response
-                elif records_count == total_records_on_day:
-                    date_obj = datetime.strptime(date_str, '%Y-%m-%d')
-                    date_obj = date_obj.replace(tzinfo=self.ist_timezone)
-                    date_str = (date_obj + timedelta(days=1)).strftime('%Y-%m-%d')
-                    page = 1
-                else:
-                    page = math.floor(len(records) / 100) + 1
 
-            self.logger.info(f"Page to fetch for device {device_sn} on {date_str}: {page}")
-            # Get device metadata from inverter records
-            self.logger.info(f"Fetching inverter record for device metadata: {device_sn}")
-            inverter_metadata = self.db_client.get_inverter_record(device_sn)
-            # Check if inverter record exists
-            if not inverter_metadata:
-                error_msg = f"No inverter record found for device {device_sn}, cannot proceed with fetching generation history"
-                self.logger.warning(error_msg)
-                raise Exception(error_msg)
+                # Reset records count
+                records_count = 0
 
-            # Fetch history for yesterday
-            self.logger.info(f"Fetching history for device {device_sn} on {date_str}")
-            history_data = self.growatt_client.fetch_device_history(device_sn, inverter_metadata, date_str, date_str, page)                
-            self.logger.info(f"Fetched {len(history_data['datas'])} records for {device_sn}")
-            self.logger.info(f"History data fetched - current_count: {len(history_data['datas'])}, total_count: {history_data['count']} records on {date_str} for device {device_sn}")
-            
-            database_entries = []
-            db_result = None
-            if store_records:
-                self.logger.info(f"Storing records for device {device_sn} on {date_str}")
-                # Process history data into database entries
-                database_entries = self.growatt_client.process_history_data_for_db(history_data, device_sn, date_str, inverter_metadata)
+            # If not overwrite, and date is not today, and records count is equal to total records on day, then skip fetch and store
+            if records_count > 0 and dont_change_date and records_count == total_records_on_day and not overwrite and date_str != today.strftime('%Y-%m-%d'):
+                self.logger.info(f"All records for device {device_sn} on {date_str} already exist, skipping fetch and store")
+                response = {
+                    'device_id': device_sn,
+                    'date': date_str,
+                    'entries_count': len(records),
+                    'db_operation': None,
+                    'status': 'skipped'
+                }
+                return response
+
+            # If records count is equal to total records on day and date is not today, then change the date to the next day
+            if records_count > 0 and records_count == total_records_on_day and date_str != today.strftime('%Y-%m-%d'):
+                date_obj = datetime.strptime(date_str, '%Y-%m-%d')
+                date_obj = date_obj.replace(tzinfo=self.ist_timezone)
+                date_str = (date_obj + timedelta(days=1)).strftime('%Y-%m-%d')
+                records_count = 0
+                self.logger.info(f"Date changed to {date_str} for device {device_sn}")
+
+            # Set page number to fetch
+            # Page 1: 1 to 100, Page 2: 101 to 200, Page 3: 201 to 300, etc.
+            all_database_entries = []
+            all_db_results = []
+            page = math.floor(records_count / 100)
+            while True:
+                page = page + 1
+
+                # Fetch history for yesterday
+                self.logger.info(f"Fetching history for device {device_sn} on {date_str} and page {page}")
+                history_data = self.growatt_client.fetch_device_history(device_sn, inverter_metadata, date_str, date_str, page)
+                self.logger.info(f"History data fetched - current_count: {len(history_data['datas'])}, total_count: {history_data['count']} records on {date_str} for device {device_sn}")
                 
-                # Insert processed entries into database
-                db_result = self.db_client.insert_history_into_database(database_entries)
-            else:
-                self.logger.info(f"Not storing records for device {device_sn} on {date_str}")
+                if len(history_data['datas']) == 0:
+                    break
+
+                database_entries = []
+                db_result = None
+                if store_records:
+                    self.logger.info(f"Storing records for device {device_sn} on {date_str}")
+                    # Process history data into database entries
+                    database_entries = self.growatt_client.process_history_data_for_db(history_data, device_sn, date_str, inverter_metadata)
+
+                    # Insert processed entries into database
+                    db_result = self.db_client.insert_history_into_database(database_entries)
+                    all_database_entries.extend(database_entries)
+                    all_db_results.append(db_result)
+                else:
+                    self.logger.info(f"Not storing records for device {device_sn} on {date_str}")
 
             response = {
                 'device_id': device_sn,
                 'date': date_str,
-                'entries_count': len(database_entries),
-                'db_operation': db_result,
+                'entries_count': len(all_database_entries),
+                'db_operation': all_db_results,
                 'status': 'success'
             }
             return response
