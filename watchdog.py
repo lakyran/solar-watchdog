@@ -98,8 +98,8 @@ class Watchdog:
                 total_records_on_day = records[0]['total_records_on_day']
                 self.logger.info(f"Total records on day {date_str} for device {device_sn}: {total_records_on_day}")
 
-            # If records exist and overwrite is True or date is today, then first delete the records for the device and date
-            if records_count > 0 and (overwrite or date_str == today.strftime('%Y-%m-%d')):
+            # If records exist and overwrite is True, then first delete the records for the device and date
+            if records_count > 0 and overwrite:
                 self.logger.info(f"Deleting records for device {device_sn} on {date_str}")
                 db_result = self.db_client.delete_device_records_by_date(device_sn, date_str)
                 if db_result['status'] == 'success':
@@ -136,7 +136,10 @@ class Watchdog:
             # Page 1: 1 to 100, Page 2: 101 to 200, Page 3: 201 to 300, etc.
             all_database_entries = []
             all_db_results = []
-            page = math.floor(records_count / 100)
+            # page = math.floor(records_count / 100)
+            page = 0
+
+            # History Fetching Loop
             while True:
                 page = page + 1
 
@@ -151,11 +154,12 @@ class Watchdog:
                 database_entries = []
                 db_result = None
                 if store_records:
-                    self.logger.info(f"Storing records for device {device_sn} on {date_str}")
+                    self.logger.info(f"Preparing to store records for device {device_sn} on {date_str}")
                     # Process history data into database entries
                     database_entries = self.growatt_client.process_history_data_for_db(history_data, device_sn, date_str, inverter_metadata)
 
                     # Insert processed entries into database
+                    self.logger.info(f"Storing {len(database_entries)} records for device {device_sn} on {date_str}")
                     db_result = self.db_client.insert_history_into_database(database_entries)
                     all_database_entries.extend(database_entries)
                     all_db_results.append(db_result)
@@ -452,7 +456,7 @@ class Watchdog:
                     morning_time = datetime.strptime('06:00', '%H:%M').time()
                     evening_time = datetime.strptime('19:00', '%H:%M').time()
                     
-                    if now.time() > morning_time and now.time() < evening_time:
+                    if now.time() > morning_time:
                         start_date = latest_analysis_date
                     else:
                         # Return early if analysis is already done for today and outside operating hours

@@ -311,8 +311,16 @@ def batch_ingest_inverters_history():
     try:
         # Optional query parameters
         date = request.args.get('date', None)
-        overwrite = request.args.get('overwrite', False)
-        store_records = request.args.get('store_records', True)
+        overwrite = request.args.get('overwrite', 'false')
+        if overwrite.lower() == 'true':
+            overwrite = True
+        else:
+            overwrite = False
+        store_records = request.args.get('store_records', 'true')
+        if store_records.lower() == 'false':
+            store_records = False
+        else:
+            store_records = True
         
         # Get the list of all inverters
         inverters = watchdog.db_client.get_inverters_list()
@@ -354,14 +362,13 @@ def batch_ingest_inverters_history():
                     
                     # Add to device results
                     device_results.append(ingest_result)
-                    
-                    # If status is skipped, we're done with this device
-                    if ingest_result.get('status') == 'skipped':
+
+                    # If date in the result is today, we're done with this device
+                    if ingest_result.get('date') == get_current_time_ist().strftime('%Y-%m-%d'):
                         break
-                    
-                    # If there was a date change in the result, update our current date
-                    if current_date != ingest_result.get('date'):
-                        current_date = ingest_result.get('date')
+
+                    # Wait for 2 seconds before fetching the next page
+                    time.sleep(2)
                     
                 # Add all results for this device
                 results.append({
