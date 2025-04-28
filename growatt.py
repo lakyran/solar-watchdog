@@ -75,9 +75,9 @@ class GrowattAPI:
         headers = {
             'Token': f'{self.api_token}',
             'User-Agent': user_agent,
-            'Accept-Encoding': 'gzip, deflate, br',
+            'Accept': 'application/json',
+            'Content-Type': 'application/json',
             'Connection': 'keep-alive',
-            'Accept': '*/*',
             'Cache-Control': 'no-cache'
         }
         
@@ -95,6 +95,11 @@ class GrowattAPI:
                 timeout=30
             )
             response.raise_for_status()  # Raise an exception for bad status codes
+            
+            # Debug: Log response details
+            self.logger.debug(f"Response Content-Type: {response.headers.get('Content-Type')}")
+            self.logger.debug(f"Response Content-Encoding: {response.headers.get('Content-Encoding')}")
+            self.logger.debug(f"Response apparent encoding: {response.apparent_encoding}")
             
             # Debug: Log the raw response content
             self.logger.debug(f"Raw API response: {response.text[:200]}...")
