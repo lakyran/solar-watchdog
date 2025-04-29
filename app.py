@@ -1,4 +1,4 @@
-from flask import Flask, jsonify, request, render_template
+from flask import Flask, jsonify, request, render_template, send_from_directory
 import os
 import logging
 from dotenv import load_dotenv
@@ -24,7 +24,11 @@ logger.info("Starting Unisolar Watchdog Service")
 load_dotenv()
 
 # Initialize the app
-app = Flask(__name__)
+app = Flask(__name__, static_folder='static')
+
+@app.route('/favicon.ico')
+def favicon():
+    return send_from_directory(app.static_folder, 'favicon.ico', mimetype='image/vnd.microsoft.icon')
 
 # Initialize the Watchdog object
 watchdog = Watchdog(app)

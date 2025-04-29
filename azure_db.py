@@ -889,6 +889,9 @@ class AzureDB:
                     "message": error_msg
                 }
             
+            # Get current IST time for last_updated_at
+            last_updated_at = self.get_current_time_ist()
+            
             # Check if a record already exists
             cursor.execute(
                 """
@@ -907,10 +910,11 @@ class AzureDB:
                     """
                     UPDATE analysis_ledger
                     SET device_oem = %s,
-                        latest_analysis_date = %s
+                        latest_analysis_date = %s,
+                        last_updated_at = %s
                     WHERE device_sn = %s AND vendor = %s
                     """,
-                    (device_oem, analysis_timestamp, device_sn, vendor)
+                    (device_oem, analysis_timestamp, last_updated_at, device_sn, vendor)
                 )
                 self.logger.info(f"Updated analysis ledger for device {device_sn} with date {analysis_date}")
             else:
@@ -919,10 +923,10 @@ class AzureDB:
                 cursor.execute(
                     """
                     INSERT INTO analysis_ledger
-                    (device_sn, vendor, device_oem, latest_analysis_date)
-                    VALUES (%s, %s, %s, %s)
+                    (device_sn, vendor, device_oem, latest_analysis_date, last_updated_at)
+                    VALUES (%s, %s, %s, %s, %s)
                     """,
-                    (device_sn, vendor, device_oem, analysis_timestamp)
+                    (device_sn, vendor, device_oem, analysis_timestamp, last_updated_at)
                 )
                 self.logger.info(f"Created new analysis ledger entry for device {device_sn} with date {analysis_date}")
             
