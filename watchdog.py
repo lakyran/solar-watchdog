@@ -65,7 +65,6 @@ class Watchdog:
 
         try:
             today = self.get_current_time_ist()
-            evening_time = datetime.strptime('19:00', '%H:%M').time()
 
             # Get device metadata from inverter records
             self.logger.info(f"Fetching inverter record for device metadata: {device_sn}")
