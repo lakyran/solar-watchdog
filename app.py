@@ -616,39 +616,6 @@ def ingest_plant_energy_summary():
     except Exception as e:
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
-@app.route('/plant/summary', methods=['GET'])
-def get_plant_summary():
-    """Get energy summary for a specific plant"""
-    try:
-        # Get required plant_id parameter
-        plant_id = request.args.get('plant_id')
-        
-        # Validate the parameter
-        if not plant_id:
-            return jsonify({
-                'status': 'error',
-                'message': 'plant_id parameter is required'
-            }), 400
-        
-        # Get the plant energy summary from the database
-        summary = watchdog.db_client.get_plant_energy_summary(plant_id)
-        
-        # Check if summary was found
-        if not summary:
-            return jsonify({
-                'status': 'error',
-                'message': f'No energy summary found for plant_id: {plant_id}'
-            }), 404
-        
-        # Return the summary as JSON
-        return jsonify({
-            'status': 'success',
-            'plant_id': plant_id,
-            'summary': summary
-        })
-    except Exception as e:
-        return jsonify({'status': 'error', 'message': str(e)}), 500
-
 @app.route('/plants/summary/batch-ingest', methods=['GET'])
 def batch_ingest_plants_summary():
     """Fetch and store energy summaries for all plants in the system"""
@@ -727,6 +694,66 @@ def batch_ingest_plants_summary():
             'failed_plants': failed_plants,
             'results': results
         })
+        
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+@app.route('/plant/summary', methods=['GET'])
+def get_plant_summary():
+    """Get energy summary for a specific plant"""
+    try:
+        # Get required plant_id parameter
+        plant_id = request.args.get('plant_id')
+        
+        # Validate the parameter
+        if not plant_id:
+            return jsonify({
+                'status': 'error',
+                'message': 'plant_id parameter is required'
+            }), 400
+        
+        # Get the plant energy summary from the database
+        summary = watchdog.db_client.get_plant_energy_summary(plant_id)
+        
+        # Check if summary was found
+        if not summary:
+            return jsonify({
+                'status': 'error',
+                'message': f'No energy summary found for plant_id: {plant_id}'
+            }), 404
+        
+        # Return the summary as JSON
+        return jsonify({
+            'status': 'success',
+            'plant_id': plant_id,
+            'summary': summary
+        })
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+@app.route('/dashboard', methods=['GET'])
+def get_user_dashboard():
+    """Get dashboard data for a specific user including their plant details and summary"""
+    try:
+        # Get required username parameter
+        username = request.args.get('username')
+        
+        # Validate the parameter
+        if not username:
+            return jsonify({
+                'status': 'error',
+                'message': 'username parameter is required'
+            }), 400
+        
+        # Call the watchdog method to get dashboard data
+        result = watchdog.get_user_dashboard_data(username)
+        
+        # If the result is a tuple with a status code, handle the error
+        if isinstance(result, tuple) and len(result) > 1:
+            return jsonify(result[0]), result[1]
+            
+        # Return the result as JSON
+        return jsonify(result)
         
     except Exception as e:
         return jsonify({'status': 'error', 'message': str(e)}), 500

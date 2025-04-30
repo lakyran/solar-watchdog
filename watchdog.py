@@ -786,3 +786,57 @@ class Watchdog:
             error_msg = f"Error processing plant summary for {plant_id}: {str(e)}"
             self.logger.error(error_msg)
             return {"status": "error", "message": error_msg}, 500
+
+    def get_user_dashboard_data(self, username):
+        """
+        Get dashboard data for a specific user, assuming each user has exactly one plant
+        
+        Args:
+            username (str): Username to fetch dashboard data for
+            
+        Returns:
+            dict: Dashboard data including the user's plant details and summary
+        """
+        try:
+            self.logger.info(f"Getting dashboard data for user: {username}")
+            
+            # Validate username
+            if not username:
+                error_msg = "Username is required"
+                self.logger.error(error_msg)
+                return {"status": "error", "message": error_msg}, 400
+            
+            # Step 1: Get the plant for the user
+            plants = self.db_client.get_plants_list(username)
+            
+            if not plants or len(plants) == 0:
+                self.logger.info(f"No plant found for user: {username}")
+                return {
+                    "status": "error", 
+                    "message": f"No plant found for user: {username}"
+                }, 404
+            
+            # Get the first plant (assuming one plant per user)
+            plant = plants[0]
+            plant_id = plant.get('plant_id')
+            
+            if not plant_id:
+                error_msg = f"Invalid plant data for user: {username}"
+                self.logger.error(error_msg)
+                return {"status": "error", "message": error_msg}, 500
+            
+            # Step 2: Get plant summary
+            plant_summary = self.db_client.get_plant_energy_summary(plant_id)
+            
+            # Return the dashboard data
+            return {
+                "status": "success",
+                "username": username,
+                "plant_details": plant,
+                "plant_summary": plant_summary or {}
+            }
+                
+        except Exception as e:
+            error_msg = f"Error getting dashboard data for user {username}: {str(e)}"
+            self.logger.error(error_msg)
+            return {"status": "error", "message": error_msg}, 500
