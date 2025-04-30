@@ -1121,7 +1121,7 @@ class AzureDB:
             # Query to get energy summary for the specific plant
             cursor.execute(
                 """
-                SELECT plant_id, plant_name, user_name, vendor, peak_power, 
+                SELECT plant_id, plant_name, user_name, vendor, peak_power, current_power,
                        total_energy, yearly_energy, monthly_energy, today_energy, 
                        carbon_offset, TO_CHAR(last_updated_at, 'YYYY-MM-DD HH24:MI:SS') as last_updated_at
                 FROM plant_energy_summary
@@ -1183,7 +1183,7 @@ class AzureDB:
         # Required fields
         required_fields = ['plant_id', 'user_name', 'vendor', 'peak_power', 
                           'total_energy', 'yearly_energy', 'monthly_energy', 
-                          'today_energy', 'carbon_offset']
+                          'today_energy', 'carbon_offset', 'current_power']
         
         # Validate required fields
         for field in required_fields:
@@ -1217,8 +1217,8 @@ class AzureDB:
                 INSERT INTO plant_energy_summary (
                     plant_id, plant_name, user_name, vendor, peak_power, 
                     total_energy, yearly_energy, monthly_energy, today_energy, 
-                    carbon_offset, last_updated_at
-                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    current_power, carbon_offset, last_updated_at
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 ON CONFLICT (plant_id, vendor) DO UPDATE SET 
                     plant_name = EXCLUDED.plant_name,
                     user_name = EXCLUDED.user_name,
@@ -1227,6 +1227,7 @@ class AzureDB:
                     yearly_energy = EXCLUDED.yearly_energy,
                     monthly_energy = EXCLUDED.monthly_energy,
                     today_energy = EXCLUDED.today_energy,
+                    current_power = EXCLUDED.current_power,
                     carbon_offset = EXCLUDED.carbon_offset,
                     last_updated_at = EXCLUDED.last_updated_at
                 """,
@@ -1240,6 +1241,7 @@ class AzureDB:
                     plant_data['yearly_energy'],
                     plant_data['monthly_energy'],
                     plant_data['today_energy'],
+                    plant_data['current_power'],
                     plant_data['carbon_offset'],
                     last_updated_at
                 )

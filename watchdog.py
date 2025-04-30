@@ -752,6 +752,7 @@ class Watchdog:
                 'user_name': user_name,
                 'vendor': vendor,
                 'peak_power': peak_power,
+                'current_power': float(api_summary.get('current_power', 0)),
                 'total_energy': float(api_summary.get('total_energy', 0)),
                 'yearly_energy': float(api_summary.get('yearly_energy', 0)),
                 'monthly_energy': float(api_summary.get('monthly_energy', 0)),
