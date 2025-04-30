@@ -967,4 +967,59 @@ class AzureDB:
             if cursor:
                 cursor.close()
             if conn:
+                self.connection_pool.putconn(conn)
+    
+    def get_users_list(self):
+        """
+        Get a list of all users in the system by extracting unique user names from the inverters table.
+        
+        Returns:
+            list: A list of dictionaries containing user_name and inverter_count for each user
+        """
+        if not self.connection_pool:
+            self.logger.error("Database connection pool not available")
+            raise ValueError("Database connection pool not available")
+        
+        conn = None
+        cursor = None
+        
+        try:
+            # Get connection from pool
+            conn = self.connection_pool.getconn()
+            cursor = conn.cursor()
+            
+            self.logger.debug("Querying list of all users")
+            
+            # Query to get all distinct user names with their inverter counts
+            cursor.execute(
+                """
+                SELECT user_name, COUNT(DISTINCT device_sn) as inverter_count
+                FROM inverters
+                WHERE user_name IS NOT NULL AND user_name != ''
+                GROUP BY user_name
+                ORDER BY user_name
+                """
+            )
+            
+            # Fetch all rows and convert to dictionaries
+            users = []
+            for row in cursor.fetchall():
+                user = {
+                    'user_name': row[0],
+                    'inverter_count': row[1]
+                }
+                users.append(user)
+                
+            self.logger.info(f"Retrieved {len(users)} users from database")
+            return users
+            
+        except Exception as e:
+            error_msg = f"Error fetching users list: {str(e)}"
+            self.logger.error(error_msg)
+            raise Exception(error_msg)
+        
+        finally:
+            if cursor:
+                cursor.close()
+            if conn:
                 self.connection_pool.putconn(conn) 

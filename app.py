@@ -553,5 +553,21 @@ def batch_analyze_inverters_disruptions():
     except Exception as e:
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
+@app.route('/users/list', methods=['GET'])
+def get_users_list():
+    """Get a list of all users in the system"""
+    try:
+        # Get the list of users from the database
+        users = watchdog.db_client.get_users_list()
+        
+        # Return the list as JSON
+        return jsonify({
+            'status': 'success',
+            'count': len(users),
+            'users': users
+        })
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
 if __name__ == '__main__':
     app.run()
