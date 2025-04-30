@@ -128,12 +128,6 @@ class GrowattAPI:
                 error_msg = f"API error: {json_response.get('error_msg', 'Unknown error')}"
                 self.logger.error(error_msg)
                 raise ValueError(error_msg)
-            
-            # Ensure history_data has the expected structure
-            if not isinstance(json_response['data'], dict) or 'datas' not in json_response['data']:
-                error_msg = f"Invalid response format from API: {json_response}. 'datas' key is missing"
-                self.logger.error(error_msg)
-                raise ValueError(error_msg)
                 
             return json_response['data']
             
@@ -362,3 +356,37 @@ class GrowattAPI:
             raise ValueError(error_msg)
         
         return transformed_entry
+
+    def fetch_plant_summary(self, plant_id):
+        """
+        Fetch energy summary data for a specific plant from the Growatt API.
+        
+        Args:
+            plant_id (str): The ID of the plant to fetch summary for
+            
+        Returns:
+            dict: Raw plant energy summary data directly from the API
+            
+        Raises:
+            ValueError: If plant_id is not provided or API returns an error
+            Exception: If the API request fails
+        """
+        if not plant_id:
+            raise ValueError("Plant ID is required")
+            
+        endpoint = '/plant/data'
+        params = {'plant_id': plant_id}
+        
+        try:
+            # Use the existing call_api method
+            response = self.call_api(endpoint, method='GET', params=params)
+            
+            # The call_api method already handles validation and error checking,
+            # and returns the 'data' field from the response
+            return response
+            
+        except ValueError as e:
+            raise e
+        except Exception as e:
+            self.logger.error(f"Error fetching plant summary: {str(e)}")
+            raise Exception(f"Failed to fetch plant summary: {str(e)}")

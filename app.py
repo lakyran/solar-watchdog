@@ -589,5 +589,147 @@ def get_plants_list():
     except Exception as e:
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
+@app.route('/plant/summary/ingest', methods=['GET'])
+def ingest_plant_energy_summary():
+    """Fetch plant energy summary from Growatt API and store it in the database"""
+    try:
+        # Get required plant_id parameter
+        plant_id = request.args.get('plant_id')
+        
+        # Validate the required parameter
+        if not plant_id:
+            return jsonify({
+                'status': 'error',
+                'message': 'plant_id parameter is required'
+            }), 400
+        
+        # Call the watchdog method to fetch and store plant summary
+        result = watchdog.fetch_and_store_plant_summary(plant_id=plant_id)
+        
+        # If the result is a tuple with a status code, handle the error
+        if isinstance(result, tuple) and len(result) > 1:
+            return jsonify(result[0]), result[1]
+            
+        # Return the result as JSON
+        return jsonify(result)
+        
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+@app.route('/plant/summary', methods=['GET'])
+def get_plant_summary():
+    """Get energy summary for a specific plant"""
+    try:
+        # Get required plant_id parameter
+        plant_id = request.args.get('plant_id')
+        
+        # Validate the parameter
+        if not plant_id:
+            return jsonify({
+                'status': 'error',
+                'message': 'plant_id parameter is required'
+            }), 400
+        
+        # Get the plant energy summary from the database
+        summary = watchdog.db_client.get_plant_energy_summary(plant_id)
+        
+        # Check if summary was found
+        if not summary:
+            return jsonify({
+                'status': 'error',
+                'message': f'No energy summary found for plant_id: {plant_id}'
+            }), 404
+        
+        # Return the summary as JSON
+        return jsonify({
+            'status': 'success',
+            'plant_id': plant_id,
+            'summary': summary
+        })
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+@app.route('/plants/summary/batch-ingest', methods=['GET'])
+def batch_ingest_plants_summary():
+    """Fetch and store energy summaries for all plants in the system"""
+    try:
+        # Get the list of all plants
+        plants = watchdog.db_client.get_plants_list()
+        
+        if not plants:
+            return jsonify({
+                'status': 'error',
+                'message': 'No plants found in the system'
+            }), 404
+        
+        # Track results for each plant
+        results = []
+        successful_plants = 0
+        failed_plants = 0
+        
+        # Process each plant
+        for plant in plants:
+            plant_id = plant.get('plant_id')
+            
+            # Skip if no plant_id
+            if not plant_id:
+                continue
+                
+            try:
+                # Fetch and store summary for this plant
+                result = watchdog.fetch_and_store_plant_summary(plant_id)
+                
+                # Handle case where response is a tuple (error response)
+                if isinstance(result, tuple) and len(result) > 1:
+                    error_data, status_code = result
+                    # Create a standardized error result
+                    plant_result = {
+                        'plant_id': plant_id,
+                        'user_name': plant.get('user_name', ''),
+                        'status': 'error',
+                        'error': error_data.get('message', 'Unknown error'),
+                        'status_code': status_code
+                    }
+                    failed_plants += 1
+                else:
+                    # Success case
+                    plant_result = {
+                        'plant_id': plant_id,
+                        'user_name': plant.get('user_name', ''),
+                        'status': 'success',
+                        'api_data': result.get('api_data'),
+                        'db_result': result.get('db_result')
+                    }
+                    successful_plants += 1
+                
+                # Add result to results list
+                results.append(plant_result)
+                
+                # Wait for 1 second before processing the next plant to avoid API rate limits
+                time.sleep(1)
+                
+            except Exception as e:
+                # If one plant fails, continue with others but log the error
+                logger.error(f"Error processing plant {plant_id}: {str(e)}")
+                results.append({
+                    'plant_id': plant_id,
+                    'user_name': plant.get('user_name', ''),
+                    'status': 'error',
+                    'error': str(e)
+                })
+                failed_plants += 1
+        
+        # Return the aggregated results
+        return jsonify({
+            'status': 'success',
+            'total_plants': len(plants),
+            'successful_plants': successful_plants,
+            'failed_plants': failed_plants,
+            'results': results
+        })
+        
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
 if __name__ == '__main__':
     app.run()

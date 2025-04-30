@@ -1092,4 +1092,183 @@ class AzureDB:
             if cursor:
                 cursor.close()
             if conn:
+                self.connection_pool.putconn(conn)
+    
+    def get_plant_energy_summary(self, plant_id):
+        """
+        Get energy summary for a specific plant from the plant_energy_summary table.
+        
+        Args:
+            plant_id (str): The ID of the plant to fetch summary for
+            
+        Returns:
+            dict: Plant energy summary data or None if not found
+        """
+        if not self.connection_pool:
+            self.logger.error("Database connection pool not available")
+            raise ValueError("Database connection pool not available")
+        
+        conn = None
+        cursor = None
+        
+        try:
+            # Get connection from pool
+            conn = self.connection_pool.getconn()
+            cursor = conn.cursor()
+            
+            self.logger.debug(f"Querying energy summary for plant: {plant_id}")
+            
+            # Query to get energy summary for the specific plant
+            cursor.execute(
+                """
+                SELECT plant_id, plant_name, user_name, vendor, peak_power, 
+                       total_energy, yearly_energy, monthly_energy, today_energy, 
+                       carbon_offset, TO_CHAR(last_updated_at, 'YYYY-MM-DD HH24:MI:SS') as last_updated_at
+                FROM plant_energy_summary
+                WHERE plant_id = %s
+                """,
+                (plant_id,)
+            )
+            
+            # Get column names
+            column_names = [desc[0] for desc in cursor.description]
+            
+            # Fetch the row
+            row = cursor.fetchone()
+            if not row:
+                self.logger.info(f"No energy summary found for plant_id: {plant_id}")
+                return None
+                
+            # Convert row to dictionary
+            summary = dict(zip(column_names, row))
+            
+            self.logger.info(f"Retrieved energy summary for plant_id: {plant_id}")
+            return summary
+            
+        except Exception as e:
+            error_msg = f"Error fetching plant energy summary: {str(e)}"
+            self.logger.error(error_msg)
+            raise Exception(error_msg)
+        
+        finally:
+            if cursor:
+                cursor.close()
+            if conn:
+                self.connection_pool.putconn(conn)
+    
+    def insert_plant_energy_summary(self, plant_data):
+        """
+        Insert or update plant energy summary data into the plant_energy_summary table.
+        
+        Args:
+            plant_data (dict): Plant energy summary data including:
+                - plant_id (str): Plant ID
+                - plant_name (str): Plant name
+                - user_name (str): User name
+                - vendor (str): Vendor name
+                - peak_power (float): Peak power in kW
+                - total_energy (float): Total energy in kWh
+                - yearly_energy (float): Yearly energy in kWh
+                - monthly_energy (float): Monthly energy in kWh
+                - today_energy (float): Today's energy in kWh
+                - carbon_offset (float): Carbon offset in kg
+            
+        Returns:
+            dict: Result of the operation
+        """
+        if not self.connection_pool:
+            self.logger.error("Database connection pool not available")
+            raise ValueError("Database connection pool not available")
+        
+        # Required fields
+        required_fields = ['plant_id', 'user_name', 'vendor', 'peak_power', 
+                          'total_energy', 'yearly_energy', 'monthly_energy', 
+                          'today_energy', 'carbon_offset']
+        
+        # Validate required fields
+        for field in required_fields:
+            if field not in plant_data:
+                error_msg = f"Missing required field: {field}"
+                self.logger.error(error_msg)
+                return {
+                    "status": "error",
+                    "message": error_msg
+                }
+        
+        conn = None
+        cursor = None
+        
+        try:
+            # Get connection from pool
+            conn = self.connection_pool.getconn()
+            cursor = conn.cursor()
+            
+            # Get current time in IST for last_updated_at
+            last_updated_at = self.get_current_time_ist()
+            
+            # Check if plant_name is provided, use empty string if not
+            plant_name = plant_data.get('plant_name', '')
+            
+            self.logger.debug(f"Inserting/updating energy summary for plant: {plant_data['plant_id']}")
+            
+            # Insert or update plant energy summary
+            cursor.execute(
+                """
+                INSERT INTO plant_energy_summary (
+                    plant_id, plant_name, user_name, vendor, peak_power, 
+                    total_energy, yearly_energy, monthly_energy, today_energy, 
+                    carbon_offset, last_updated_at
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                ON CONFLICT (plant_id, vendor) DO UPDATE SET 
+                    plant_name = EXCLUDED.plant_name,
+                    user_name = EXCLUDED.user_name,
+                    peak_power = EXCLUDED.peak_power,
+                    total_energy = EXCLUDED.total_energy,
+                    yearly_energy = EXCLUDED.yearly_energy,
+                    monthly_energy = EXCLUDED.monthly_energy,
+                    today_energy = EXCLUDED.today_energy,
+                    carbon_offset = EXCLUDED.carbon_offset,
+                    last_updated_at = EXCLUDED.last_updated_at
+                """,
+                (
+                    plant_data['plant_id'],
+                    plant_name,
+                    plant_data['user_name'],
+                    plant_data['vendor'],
+                    plant_data['peak_power'],
+                    plant_data['total_energy'],
+                    plant_data['yearly_energy'],
+                    plant_data['monthly_energy'],
+                    plant_data['today_energy'],
+                    plant_data['carbon_offset'],
+                    last_updated_at
+                )
+            )
+            
+            # Commit the transaction
+            conn.commit()
+            
+            self.logger.info(f"Successfully inserted/updated energy summary for plant: {plant_data['plant_id']}")
+            
+            return {
+                "status": "success",
+                "message": f"Plant energy summary for {plant_data['plant_id']} updated successfully",
+                "plant_id": plant_data['plant_id'],
+                "timestamp": last_updated_at.isoformat()
+            }
+            
+        except Exception as e:
+            if conn:
+                conn.rollback()
+            error_msg = f"Database error inserting plant energy summary: {str(e)}"
+            self.logger.error(error_msg)
+            return {
+                "status": "error",
+                "message": error_msg
+            }
+        
+        finally:
+            if cursor:
+                cursor.close()
+            if conn:
                 self.connection_pool.putconn(conn) 

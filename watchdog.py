@@ -691,3 +691,98 @@ class Watchdog:
                 'created_at': task['created_at'],
                 'progress': task.get('progress', {})
             }
+
+    def fetch_and_store_plant_summary(self, plant_id):
+        """
+        Fetch plant energy summary from Growatt API and store it in the database
+        
+        Args:
+            plant_id (str): Plant ID to fetch summary for
+            
+        Returns:
+            dict: Result containing API data and database operation result
+        """
+        try:
+            self.logger.info(f"Fetching and storing energy summary for plant: {plant_id}")
+            
+            # Validate plant_id
+            if not plant_id:
+                error_msg = "Plant ID is required"
+                self.logger.error(error_msg)
+                return {"status": "error", "message": error_msg}, 400
+            
+            # Step 1: Fetch plant summary from Growatt API
+            self.logger.info(f"Step 1: Fetching plant summary from API for plant: {plant_id}")
+            api_summary = self.growatt_client.fetch_plant_summary(plant_id)
+            
+            # Initialize variables for required metadata
+            user_name = None
+            vendor = None
+            plant_name = None
+            peak_power = float(api_summary.get('peak_power_actual', 0))
+            
+            # Step 2: If any required fields are missing, get them from plants table
+            self.logger.info(f"Step 2: Getting required metadata for plant: {plant_id}")
+            plants = self.db_client.get_plants_list()
+            for plant in plants:
+                if plant.get('plant_id') == plant_id:
+                    user_name = plant.get('user_name')
+                    vendor = plant.get('vendor')
+                    plant_name = plant.get('plant_name')
+                    if not peak_power and 'peak_power' in plant:
+                        peak_power = float(plant.get('peak_power', 0))
+                    break
+            
+            # Validate that we have the required fields
+            if not user_name:
+                error_msg = f"Could not determine user_name for plant_id: {plant_id}"
+                self.logger.error(error_msg)
+                return {"status": "error", "message": error_msg}, 400
+                
+            if not vendor:
+                error_msg = f"Could not determine vendor for plant_id: {plant_id}"
+                self.logger.error(error_msg)
+                return {"status": "error", "message": error_msg}, 400
+            
+            # Step 3: Prepare data and insert/update in the database
+            self.logger.info(f"Step 3: Preparing and storing plant summary for plant_id: {plant_id}")
+            plant_data = {
+                'plant_id': plant_id,
+                'plant_name': plant_name or '',
+                'user_name': user_name,
+                'vendor': vendor,
+                'peak_power': peak_power,
+                'total_energy': float(api_summary.get('total_energy', 0)),
+                'yearly_energy': float(api_summary.get('yearly_energy', 0)),
+                'monthly_energy': float(api_summary.get('monthly_energy', 0)),
+                'today_energy': float(api_summary.get('today_energy', 0)),
+                'carbon_offset': float(api_summary.get('carbon_offset', 0))
+            }
+            
+            # Insert/update plant summary in database
+            db_result = self.db_client.insert_plant_energy_summary(plant_data)
+            
+            # Return result
+            if db_result.get('status') == 'success':
+                return {
+                    'status': 'success',
+                    'message': 'Plant energy summary updated successfully',
+                    'plant_id': plant_id,
+                    'api_data': api_summary,
+                    'db_result': db_result
+                }
+            else:
+                return {
+                    'status': 'error',
+                    'message': db_result.get('message', 'Failed to update plant energy summary'),
+                    'plant_id': plant_id
+                }, 500
+                
+        except ValueError as ve:
+            error_msg = f"Validation error: {str(ve)}"
+            self.logger.error(error_msg)
+            return {"status": "error", "message": error_msg}, 400
+        except Exception as e:
+            error_msg = f"Error processing plant summary for {plant_id}: {str(e)}"
+            self.logger.error(error_msg)
+            return {"status": "error", "message": error_msg}, 500
