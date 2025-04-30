@@ -295,15 +295,19 @@ def view_device_disruption_events():
 
 @app.route('/inverters/list', methods=['GET'])
 def get_inverters_list():
-    """Get a list of all inverters in the database"""
+    """Get a list of all inverters in the database, optionally filtered by username"""
     try:
+        # Get optional username parameter
+        username = request.args.get('username', None)
+        
         # Get the list of inverters from the database
-        inverters = watchdog.db_client.get_inverters_list()
+        inverters = watchdog.db_client.get_inverters_list(username)
         
         # Return the list as JSON
         return jsonify({
             'status': 'success',
             'count': len(inverters),
+            'username_filter': username,
             'inverters': inverters
         })
     except Exception as e:

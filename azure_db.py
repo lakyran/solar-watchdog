@@ -669,10 +669,13 @@ class AzureDB:
             if conn:
                 self.connection_pool.putconn(conn)
     
-    def get_inverters_list(self):
+    def get_inverters_list(self, username=None):
         """
         Get a list of all inverters in the database with their serial numbers and user names.
         
+        Args:
+            username (str, optional): If provided, filter inverters by this username
+            
         Returns:
             list: A list of dictionaries containing device_sn and user_name for each inverter
         """
@@ -688,16 +691,28 @@ class AzureDB:
             conn = self.connection_pool.getconn()
             cursor = conn.cursor()
             
-            self.logger.debug("Querying list of all inverters")
-            
-            # Query to get all distinct inverters
-            cursor.execute(
-                """
-                SELECT DISTINCT device_sn, user_name, device_type, vendor, plant_id
-                FROM inverters
-                ORDER BY user_name, device_sn
-                """
-            )
+            if username:
+                self.logger.debug(f"Querying list of inverters for user: {username}")
+                # Query to get inverters for a specific user
+                cursor.execute(
+                    """
+                    SELECT DISTINCT device_sn, user_name, device_type, vendor, plant_id
+                    FROM inverters
+                    WHERE LOWER(user_name) = LOWER(%s)
+                    ORDER BY user_name, device_sn
+                    """,
+                    (username,)
+                )
+            else:
+                self.logger.debug("Querying list of all inverters")
+                # Query to get all distinct inverters
+                cursor.execute(
+                    """
+                    SELECT DISTINCT device_sn, user_name, device_type, vendor, plant_id
+                    FROM inverters
+                    ORDER BY user_name, device_sn
+                    """
+                )
             
             # Get column names
             column_names = ['device_sn', 'user_name', 'device_type', 'vendor', 'plant_id']
