@@ -1022,4 +1022,74 @@ class AzureDB:
             if cursor:
                 cursor.close()
             if conn:
+                self.connection_pool.putconn(conn)
+    
+    def get_plants_list(self, username=None):
+        """
+        Get a list of all plants from the plants table, optionally filtered by username.
+        
+        Args:
+            username (str, optional): If provided, filter plants by this username
+            
+        Returns:
+            list: A list of dictionaries containing plant details
+        """
+        if not self.connection_pool:
+            self.logger.error("Database connection pool not available")
+            raise ValueError("Database connection pool not available")
+        
+        conn = None
+        cursor = None
+        
+        try:
+            # Get connection from pool
+            conn = self.connection_pool.getconn()
+            cursor = conn.cursor()
+            
+            if username:
+                self.logger.debug(f"Querying plants for user: {username}")
+                # Query to get plants for a specific user
+                cursor.execute(
+                    """
+                    SELECT plant_id, plant_name, user_name, user_id, vendor, city, 
+                           latitude, longitude, peak_power
+                    FROM plants
+                    WHERE LOWER(user_name) = LOWER(%s)
+                    ORDER BY plant_name, plant_id
+                    """,
+                    (username,)
+                )
+            else:
+                self.logger.debug("Querying list of all plants")
+                # Query to get all plants
+                cursor.execute(
+                    """
+                    SELECT plant_id, plant_name, user_name, user_id, vendor, city, 
+                           latitude, longitude, peak_power
+                    FROM plants
+                    ORDER BY user_name, plant_name, plant_id
+                    """
+                )
+            
+            # Get column names
+            column_names = [desc[0] for desc in cursor.description]
+            
+            # Fetch all rows and convert to dictionaries
+            plants = []
+            for row in cursor.fetchall():
+                plant = dict(zip(column_names, row))
+                plants.append(plant)
+                
+            self.logger.info(f"Retrieved {len(plants)} plants from database")
+            return plants
+            
+        except Exception as e:
+            error_msg = f"Error fetching plants list: {str(e)}"
+            self.logger.error(error_msg)
+            raise Exception(error_msg)
+        
+        finally:
+            if cursor:
+                cursor.close()
+            if conn:
                 self.connection_pool.putconn(conn) 

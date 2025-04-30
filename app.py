@@ -569,5 +569,25 @@ def get_users_list():
     except Exception as e:
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
+@app.route('/plants/list', methods=['GET'])
+def get_plants_list():
+    """Get a list of all plants in the system, optionally filtered by username"""
+    try:
+        # Get optional username parameter
+        username = request.args.get('username', None)
+        
+        # Get the list of plants from the database
+        plants = watchdog.db_client.get_plants_list(username)
+        
+        # Return the list as JSON
+        return jsonify({
+            'status': 'success',
+            'count': len(plants),
+            'username_filter': username,
+            'plants': plants
+        })
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
 if __name__ == '__main__':
     app.run()
