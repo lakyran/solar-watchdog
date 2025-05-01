@@ -4,7 +4,7 @@
 set -e
 
 # Set variables
-ENDPOINT="https://unisolartech-watchdog-cua9c4ghegcqcndf.centralindia-01.azurewebsites.net/plants/summary/batch-ingest"
+ENDPOINT="https://unisolartech-watchdog-databox-bgdqfzedhnd5ecbt.centralindia-01.azurewebsites.net/plants/summary/batch-ingest"
 TIMEOUT=600
 LOG_FILE="batch-ingest-plant-summary.log"
 

@@ -4,7 +4,7 @@
 set -e
 
 # Set variables
-ENDPOINT="https://unisolartech-watchdog-cua9c4ghegcqcndf.centralindia-01.azurewebsites.net/devices/disruptions/batch-analyze"
+ENDPOINT="unisolartech-watchdog-databox-bgdqfzedhnd5ecbt.centralindia-01.azurewebsites.net/devices/disruptions/batch-analyze"
 TIMEOUT=3600  # 1 hour timeout for batch analysis which can take longer
 LOG_FILE="batch-analyze-disruptions.log"
 
