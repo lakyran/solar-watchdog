@@ -829,15 +829,55 @@ class Watchdog:
             # Step 2: Get plant summary
             plant_summary = self.db_client.get_plant_energy_summary(plant_id)
             
+            # If plant_summary is None, initialize it as an empty dict
+            if plant_summary is None:
+                plant_summary = {}
+            
+            # Step 3: Get current power output and add it to plant summary
+            current_power = self.get_current_power_for_user(username)
+            plant_summary['current_power'] = current_power
+            
             # Return the dashboard data
             return {
                 "status": "success",
                 "username": username,
                 "plant_details": plant,
-                "plant_summary": plant_summary or {}
+                "plant_summary": plant_summary
             }
                 
         except Exception as e:
             error_msg = f"Error getting dashboard data for user {username}: {str(e)}"
             self.logger.error(error_msg)
             return {"status": "error", "message": error_msg}, 500
+
+    def get_current_power_for_user(self, username):
+        """
+        Get the current power output for a user, converted to kilowatts (kW)
+        
+        Args:
+            username (str): Username to fetch current power for
+            
+        Returns:
+            float: Current power in kilowatts (kW), rounded to 2 decimal places, or 0 if not available
+        """
+        try:
+            self.logger.info(f"Getting current power output for user: {username}")
+            
+            # Get current output in watts from the database
+            current_output_watts = self.db_client.get_current_output_for_user(username)
+            
+            # Convert watts to kilowatts (1 kW = 1000 W)
+            if current_output_watts is not None:
+                current_power_kw = current_output_watts / 1000.0
+                # Round to 2 decimal places
+                current_power_kw = round(current_power_kw, 2)
+                self.logger.info(f"Current power for user {username}: {current_power_kw} kW")
+                return current_power_kw
+            else:
+                self.logger.info(f"No current power data available for user {username}, returning 0")
+                return 0.0
+                
+        except Exception as e:
+            error_msg = f"Error getting current power for user {username}: {str(e)}"
+            self.logger.error(error_msg)
+            return 0.0
