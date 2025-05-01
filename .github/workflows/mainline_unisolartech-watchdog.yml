@@ -70,10 +70,16 @@ jobs:
           tenant-id: ${{ secrets.AZUREAPPSERVICE_TENANTID_5EA2C057BE1F46C69F5F07993777BB4E }}
           subscription-id: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID_93CAE43F747E468FA228AA76704B3F53 }}
 
-      - name: 'Deploy to Azure Web App'
+      - name: 'Deploy to Azure Web App - Production'
         uses: azure/webapps-deploy@v3
-        id: deploy-to-webapp
+        id: deploy-to-webapp-production
         with:
           app-name: 'unisolartech-watchdog'
           slot-name: 'Production'
-          
+      
+      - name: 'Deploy to Azure Web App - Databox'
+        uses: azure/webapps-deploy@v3
+        id: deploy-to-webapp-databox
+        with:
+          app-name: 'unisolartech-watchdog'
+          slot-name: 'databox'
