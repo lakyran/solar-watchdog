@@ -99,15 +99,14 @@ class AzureDB:
                 cursor.execute(
                     """
                     INSERT INTO power_gen_history 
-                    (datetime, vendor, user_name, device_sn, device_oem, plant_id, device_type, status, ppv, pac, eac_today, vpv1, vpv2, vpv3, vac1, vac2, vac3, temperature, fault_type, total_records_on_day, data)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    (datetime, vendor, user_name, device_sn, device_oem, plant_id, device_type, status, ppv, pac, eac_today, vpv1, vpv2, vpv3, vac1, vac2, vac3, temperature, fault_type, total_records_on_day)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                     ON CONFLICT (device_sn, datetime) DO UPDATE
                     SET vendor = EXCLUDED.vendor,
                         user_name = EXCLUDED.user_name,
                         device_oem = EXCLUDED.device_oem,
                         plant_id = EXCLUDED.plant_id,
                         device_type = EXCLUDED.device_type,
-                        data = EXCLUDED.data,
                         status = EXCLUDED.status,
                         ppv = EXCLUDED.ppv,
                         pac = EXCLUDED.pac,
@@ -142,8 +141,7 @@ class AzureDB:
                         entry['vac3'],
                         entry['temperature'],
                         entry['faultType'],
-                        entry['total_records_on_day'],
-                        entry['data']
+                        entry['total_records_on_day']
                     )
                 )
                 inserted_count += 1

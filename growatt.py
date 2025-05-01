@@ -273,8 +273,7 @@ class GrowattAPI:
                     'vac3': transformed_entry['vac3'],
                     'temperature': transformed_entry['temperature'],
                     'faultType': transformed_entry['faultType'],
-                    'total_records_on_day': total_records_on_day,
-                    'data': json.dumps(transformed_entry)  # Store the processed data
+                    'total_records_on_day': total_records_on_day
                 }
                 database_entries.append(db_entry)
         
@@ -321,7 +320,6 @@ class GrowattAPI:
                 'vac3': 'vac3',
                 'temp1': 'temperature',
                 'faultType': 'faultType'
-
             }
         }
 
