@@ -1097,6 +1097,7 @@ class AzureDB:
     def get_plant_energy_summary(self, plant_id):
         """
         Get energy summary for a specific plant from the plant_energy_summary table.
+        All float values are rounded to 2 decimal places.
         
         Args:
             plant_id (str): The ID of the plant to fetch summary for
@@ -1118,12 +1119,18 @@ class AzureDB:
             
             self.logger.debug(f"Querying energy summary for plant: {plant_id}")
             
-            # Query to get energy summary for the specific plant
+            # Query to get energy summary for the specific plant with rounded float values
             cursor.execute(
                 """
-                SELECT plant_id, plant_name, user_name, vendor, peak_power, current_power,
-                       total_energy, yearly_energy, monthly_energy, today_energy, 
-                       carbon_offset, TO_CHAR(last_updated_at, 'YYYY-MM-DD HH24:MI:SS') as last_updated_at
+                SELECT plant_id, plant_name, user_name, vendor, 
+                       ROUND(peak_power::numeric, 2) as peak_power, 
+                       ROUND(current_power::numeric, 2) as current_power,
+                       ROUND(total_energy::numeric, 2) as total_energy, 
+                       ROUND(yearly_energy::numeric, 2) as yearly_energy, 
+                       ROUND(monthly_energy::numeric, 2) as monthly_energy, 
+                       ROUND(today_energy::numeric, 2) as today_energy, 
+                       ROUND(carbon_offset::numeric, 2) as carbon_offset, 
+                       TO_CHAR(last_updated_at, 'YYYY-MM-DD HH24:MI:SS') as last_updated_at
                 FROM plant_energy_summary
                 WHERE plant_id = %s
                 """,
