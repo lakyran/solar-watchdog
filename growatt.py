@@ -388,3 +388,99 @@ class GrowattAPI:
         except Exception as e:
             self.logger.error(f"Error fetching plant summary: {str(e)}")
             raise Exception(f"Failed to fetch plant summary: {str(e)}")
+            
+    def fetch_user_plant_list(self, user_name):
+        """
+        Fetch list of plants for a specific user from the Growatt API.
+        
+        Args:
+            user_name (str): The username to fetch plants for
+            
+        Returns:
+            list: List of plants belonging to the user
+            
+        Raises:
+            ValueError: If user_name is not provided or API returns an error
+            Exception: If the API request fails
+        """
+        if not user_name:
+            raise ValueError("User name is required")
+            
+        endpoint = '/plant/user_plant_list'
+        params = {'user_name': user_name}
+        
+        try:
+            # Use the existing call_api method
+            response = self.call_api(endpoint, method='GET', params=params)
+            
+            # Validate response structure
+            if not isinstance(response, dict):
+                self.logger.error(f"Invalid response type: {type(response)}. Expected dict.")
+                raise ValueError(f"Invalid response format from Growatt API: {response}")
+                
+            if 'plants' not in response:
+                self.logger.error(f"Missing 'plants' key in response: {response}")
+                raise ValueError(f"Response missing 'plants' key: {response}")
+                
+            if not isinstance(response['plants'], list):
+                self.logger.error(f"'plants' is not a list: {type(response['plants'])}")
+                raise ValueError(f"'plants' field is not a list: {response['plants']}")
+            
+            plant_count = response.get('count', len(response['plants']))
+            self.logger.info(f"Successfully fetched {plant_count} plants for user: {user_name}")
+            
+            return response['plants']
+            
+        except ValueError as e:
+            raise e
+        except Exception as e:
+            self.logger.error(f"Error fetching user plants: {str(e)}")
+            raise Exception(f"Failed to fetch plants for user {user_name}: {str(e)}")
+            
+    def fetch_plant_devices_list(self, plant_id):
+        """
+        Fetch list of devices for a specific plant from the Growatt API.
+        
+        Args:
+            plant_id (str): The plant ID to fetch devices for
+            
+        Returns:
+            list: List of devices belonging to the plant
+            
+        Raises:
+            ValueError: If plant_id is not provided or API returns an error
+            Exception: If the API request fails
+        """
+        if not plant_id:
+            raise ValueError("Plant ID is required")
+            
+        endpoint = '/device/list'
+        params = {'plant_id': plant_id}
+        
+        try:
+            # Use the existing call_api method
+            response = self.call_api(endpoint, method='GET', params=params)
+            
+            # Validate response structure
+            if not isinstance(response, dict):
+                self.logger.error(f"Invalid response type: {type(response)}. Expected dict.")
+                raise ValueError(f"Invalid response format from Growatt API: {response}")
+                
+            if 'devices' not in response:
+                self.logger.error(f"Missing 'devices' key in response: {response}")
+                raise ValueError(f"Response missing 'devices' key: {response}")
+                
+            if not isinstance(response['devices'], list):
+                self.logger.error(f"'devices' is not a list: {type(response['devices'])}")
+                raise ValueError(f"'devices' field is not a list: {response['devices']}")
+            
+            device_count = response.get('count', len(response['devices']))
+            self.logger.info(f"Successfully fetched {device_count} devices for plant: {plant_id}")
+            
+            return response['devices']
+            
+        except ValueError as e:
+            raise e
+        except Exception as e:
+            self.logger.error(f"Error fetching plant devices: {str(e)}")
+            raise Exception(f"Failed to fetch devices for plant {plant_id}: {str(e)}")

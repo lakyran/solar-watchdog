@@ -1338,4 +1338,252 @@ class AzureDB:
             if cursor:
                 cursor.close()
             if conn:
+                self.connection_pool.putconn(conn)
+                
+    def insert_user(self, user_data):
+        """
+        Insert a new user into the users table
+        
+        Args:
+            user_data (dict): Dictionary containing user information with keys:
+                              user_id, user_name, vendor, phone, email
+                              
+        Returns:
+            dict: Result of the operation with status
+        """
+        if not self.connection_pool:
+            self.logger.error("Database connection pool not available")
+            raise ValueError("Database connection pool not available")
+        
+        conn = None
+        cursor = None
+        
+        try:
+            # Get connection from pool
+            conn = self.connection_pool.getconn()
+            cursor = conn.cursor()
+            
+            # Check required fields are present
+            required_fields = ['user_id', 'user_name', 'vendor']
+            for field in required_fields:
+                if field not in user_data or not user_data[field]:
+                    error_msg = f"Missing required field: {field}"
+                    self.logger.error(error_msg)
+                    raise ValueError(error_msg)
+            
+            # Get current timestamp in IST for registered_on if not provided
+            if 'registered_on' not in user_data or not user_data['registered_on']:
+                user_data['registered_on'] = self.get_current_time_ist()
+            
+            self.logger.info(f"Inserting user with ID: {user_data['user_id']}, Name: {user_data['user_name']}")
+            
+            # Insert user into database table
+            cursor.execute(
+                """
+                INSERT INTO users 
+                (user_id, user_name, vendor, phone, email, registered_on)
+                VALUES (%s, %s, %s, %s, %s, %s)
+                ON CONFLICT (user_id, user_name, vendor) DO UPDATE
+                SET phone = EXCLUDED.phone,
+                    email = EXCLUDED.email
+                """,
+                (
+                    user_data['user_id'],
+                    user_data['user_name'],
+                    user_data['vendor'],
+                    user_data.get('phone', None),
+                    user_data.get('email', None),
+                    user_data['registered_on']
+                )
+            )
+            
+            # Commit the transaction
+            conn.commit()
+            
+            self.logger.info(f"Successfully inserted user: {user_data['user_name']} (ID: {user_data['user_id']})")
+            
+            return {
+                "status": "success",
+                "message": f"User {user_data['user_name']} successfully inserted/updated"
+            }
+            
+        except Exception as e:
+            if conn:
+                conn.rollback()
+            self.logger.error(f"Database error during user insertion: {e}")
+            raise Exception(f"Database error: {str(e)}")
+        
+        finally:
+            if cursor:
+                cursor.close()
+            if conn:
+                self.connection_pool.putconn(conn)
+                
+    def insert_plant(self, plant_data):
+        """
+        Insert a new plant into the plants table
+        
+        Args:
+            plant_data (dict): Dictionary containing plant information with keys:
+                              plant_id, plant_name, user_name, user_id, vendor, city, 
+                              latitude, longitude, peak_power
+                              
+        Returns:
+            dict: Result of the operation with status
+        """
+        if not self.connection_pool:
+            self.logger.error("Database connection pool not available")
+            raise ValueError("Database connection pool not available")
+        
+        conn = None
+        cursor = None
+        
+        try:
+            # Get connection from pool
+            conn = self.connection_pool.getconn()
+            cursor = conn.cursor()
+            
+            # Check required fields are present
+            required_fields = ['plant_id', 'user_name', 'vendor', 'city', 'latitude', 'longitude', 'peak_power']
+            for field in required_fields:
+                if field not in plant_data or plant_data[field] is None:
+                    error_msg = f"Missing required field: {field}"
+                    self.logger.error(error_msg)
+                    raise ValueError(error_msg)
+            
+            self.logger.info(f"Inserting plant with ID: {plant_data['plant_id']}, Name: {plant_data.get('plant_name', 'N/A')}")
+            
+            # Insert plant into database table
+            cursor.execute(
+                """
+                INSERT INTO plants
+                (plant_id, plant_name, user_name, user_id, vendor, city, latitude, longitude, peak_power)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                ON CONFLICT (plant_id, vendor) DO UPDATE
+                SET plant_name = EXCLUDED.plant_name,
+                    user_name = EXCLUDED.user_name,
+                    user_id = EXCLUDED.user_id,
+                    city = EXCLUDED.city,
+                    latitude = EXCLUDED.latitude,
+                    longitude = EXCLUDED.longitude,
+                    peak_power = EXCLUDED.peak_power
+                """,
+                (
+                    plant_data['plant_id'],
+                    plant_data.get('plant_name', ''),
+                    plant_data['user_name'],
+                    plant_data.get('user_id', ''),
+                    plant_data['vendor'],
+                    plant_data['city'],
+                    plant_data['latitude'],
+                    plant_data['longitude'],
+                    plant_data['peak_power']
+                )
+            )
+            
+            # Commit the transaction
+            conn.commit()
+            
+            self.logger.info(f"Successfully inserted plant: {plant_data.get('plant_name', 'N/A')} (ID: {plant_data['plant_id']})")
+            
+            return {
+                "status": "success",
+                "message": f"Plant {plant_data.get('plant_name', 'N/A')} successfully inserted/updated"
+            }
+            
+        except Exception as e:
+            if conn:
+                conn.rollback()
+            self.logger.error(f"Database error during plant insertion: {e}")
+            raise Exception(f"Database error: {str(e)}")
+        
+        finally:
+            if cursor:
+                cursor.close()
+            if conn:
+                self.connection_pool.putconn(conn)
+                
+    def insert_inverter(self, inverter_data):
+        """
+        Insert a new inverter into the inverters table
+        
+        Args:
+            inverter_data (dict): Dictionary containing inverter information with keys:
+                                 device_sn, user_name, user_id, vendor, plant_id,
+                                 device_oem, device_type, latitude, longitude
+                                 
+        Returns:
+            dict: Result of the operation with status
+        """
+        if not self.connection_pool:
+            self.logger.error("Database connection pool not available")
+            raise ValueError("Database connection pool not available")
+        
+        conn = None
+        cursor = None
+        
+        try:
+            # Get connection from pool
+            conn = self.connection_pool.getconn()
+            cursor = conn.cursor()
+            
+            # Check required fields are present
+            required_fields = ['device_sn', 'user_name', 'vendor', 'plant_id', 'device_oem', 
+                              'device_type', 'latitude', 'longitude']
+            for field in required_fields:
+                if field not in inverter_data or inverter_data[field] is None:
+                    error_msg = f"Missing required field: {field}"
+                    self.logger.error(error_msg)
+                    raise ValueError(error_msg)
+            
+            self.logger.info(f"Inserting inverter with SN: {inverter_data['device_sn']}, User: {inverter_data['user_name']}")
+            
+            # Insert inverter into database table
+            cursor.execute(
+                """
+                INSERT INTO inverters
+                (device_sn, user_name, user_id, vendor, plant_id, device_oem, device_type, latitude, longitude)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                ON CONFLICT (device_sn, vendor) DO UPDATE
+                SET user_name = EXCLUDED.user_name,
+                    user_id = EXCLUDED.user_id,
+                    plant_id = EXCLUDED.plant_id,
+                    device_oem = EXCLUDED.device_oem,
+                    device_type = EXCLUDED.device_type,
+                    latitude = EXCLUDED.latitude,
+                    longitude = EXCLUDED.longitude
+                """,
+                (
+                    inverter_data['device_sn'],
+                    inverter_data['user_name'],
+                    inverter_data.get('user_id', ''),
+                    inverter_data['vendor'],
+                    inverter_data['plant_id'],
+                    inverter_data['device_oem'],
+                    inverter_data['device_type'],
+                    inverter_data['latitude'],
+                    inverter_data['longitude']
+                )
+            )
+            
+            # Commit the transaction
+            conn.commit()
+            
+            self.logger.info(f"Successfully inserted inverter: {inverter_data['device_sn']}")
+            
+            return {
+                "status": "success",
+                "message": f"Inverter {inverter_data['device_sn']} successfully inserted/updated"
+            }
+            
+        except Exception as e:
+            if conn:
+                conn.rollback()
+            self.logger.error(f"Database error during inverter insertion: {e}")
+            raise Exception(f"Database error: {str(e)}")
+        
+        finally:
+            if cursor:
+                cursor.close()
+            if conn:
                 self.connection_pool.putconn(conn) 

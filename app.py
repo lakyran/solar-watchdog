@@ -569,6 +569,63 @@ def get_users_list():
     except Exception as e:
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
+@app.route('/users/onboard', methods=['POST'])
+def onboard_new_user():
+    """
+    Onboard a new user with plants and devices
+    
+    Required POST parameters:
+    - username: Username for the new user
+    - user_id: User ID for the new user
+    - vendor: Vendor name (e.g., 'Growatt')
+    
+    Optional POST parameters:
+    - phone: User's phone number
+    - email: User's email address
+    """
+    try:
+        # Get parameters from request JSON
+        request_data = request.get_json()
+        
+        if not request_data:
+            return jsonify({
+                'status': 'error',
+                'message': 'Request body is required with JSON data'
+            }), 400
+        
+        # Extract required parameters
+        username = request_data.get('username')
+        user_id = request_data.get('user_id')
+        vendor = request_data.get('vendor')
+        
+        # Validate required parameters
+        if not username:
+            return jsonify({'status': 'error', 'message': 'username parameter is required'}), 400
+        if not user_id:
+            return jsonify({'status': 'error', 'message': 'user_id parameter is required'}), 400
+        if not vendor:
+            return jsonify({'status': 'error', 'message': 'vendor parameter is required'}), 400
+        
+        # Extract optional parameters
+        phone = request_data.get('phone')
+        email = request_data.get('email')
+        
+        # Call the onboard_new_user method
+        result = watchdog.onboard_new_user(
+            username=username,
+            user_id=user_id,
+            vendor=vendor,
+            phone=phone,
+            email=email
+        )
+        
+        # Return the result
+        return jsonify(result)
+        
+    except Exception as e:
+        logger.error(f"Error onboarding new user: {str(e)}")
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
 @app.route('/plants/list', methods=['GET'])
 def get_plants_list():
     """Get a list of all plants in the system, optionally filtered by username"""
