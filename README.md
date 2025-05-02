@@ -14,6 +14,80 @@ The Unisolar Watchdog Service is designed to:
 
 All timestamps in the system are handled in Indian Standard Time (IST, UTC+5:30).
 
+## System Architecture
+
+The solar monitoring system consists of several core components:
+
+### Components
+1. **Flask Web Application** (`app.py`) - Provides HTTP endpoints for various functions
+2. **Watchdog Service** (`watchdog.py`) - Core business logic implementation
+3. **Growatt API Client** (`growatt.py`) - Handles communication with the Growatt solar monitoring API
+4. **Azure Database Client** (`azure_db.py`) - Manages PostgreSQL database interactions
+5. **AI Analysis Agent** (`ai_agent.py`) - Analyzes solar generation data for disruptions
+
+### Key Features
+
+#### User and Equipment Management
+- Complete user onboarding workflow to register users, their plants, and inverter devices
+- Database storage of user information, plants, inverters, and generation history
+- API methods to fetch plant lists and device information
+
+#### Data Collection
+- Automated fetching and storing of solar generation data from Growatt API
+- Support for historical data import and batch operations
+- Device-specific data handling based on inverter type
+
+#### Disruption Analysis
+- AI-powered analysis to identify disruptions in power generation
+- Detection of anomalies and potential issues in solar system performance
+- Storage of disruption events with detailed analysis
+- Date range analysis capabilities for historical data
+
+#### Monitoring and Reporting
+- Dashboard functionality to view plant summaries and performance
+- Current power output monitoring
+- Plant energy summaries (daily, monthly, yearly, total generation)
+- Carbon offset tracking
+
+### Database Schema
+
+The system uses a PostgreSQL database with several tables:
+- `users` - Stores user information
+- `plants` - Stores solar plant details 
+- `inverters` - Stores inverter/device information
+- `power_gen_history` - Stores generation data points
+- `disruption_events` - Stores detected disruption events
+- `analysis_ledger` - Tracks analysis history
+- `plant_energy_summary` - Stores energy summaries for plants
+
+### Technical Design
+
+The system follows a well-structured design pattern:
+- Clear separation of concerns between API, data access, and business logic
+- Robust error handling and logging throughout
+- Background task support for long-running operations
+- Timezone handling for data consistency (IST standardization)
+- Connection pooling for database efficiency
+
+### Recent Enhancements
+
+Several valuable features were recently added to the system:
+
+#### User Onboarding Workflow
+- Complete API integration for fetching user plants and devices from Growatt
+- Database methods for inserting users, plants, and inverters
+- Exposed via a new `/users/onboard` POST endpoint
+- Automatic discovery and configuration of solar equipment
+
+#### Deployment Infrastructure
+- GitHub workflow for deploying to a 'databox' slot on Azure App Service
+- Branch-specific deployment configuration for development and testing
+
+#### Enhanced Disruption Analysis
+- Improved date handling to start analysis from the first available record when no start date is provided
+- Better tracking of analysis history through the analysis ledger
+- More accurate detection of ongoing disruptions
+
 ## Installation
 
 ### Prerequisites
@@ -176,6 +250,64 @@ All timestamps in the system are handled in Indian Standard Time (IST, UTC+5:30)
   - `end_date`: End date in YYYY-MM-DD format (optional, defaults to today)
   - `overwrite`: Whether to overwrite existing analysis (optional, default: true)
 - **Description**: Analyzes disruptions for all inverters, processing each sequentially.
+
+### User Management
+
+#### Onboard New User
+- **Route**: `/users/onboard`
+- **Method**: POST
+- **Request Body** (JSON):
+  - `username`: Username for the new user (required)
+  - `user_id`: User ID for the new user (required)
+  - `vendor`: Vendor name (e.g., 'Growatt') (required)
+  - `phone`: User's phone number (optional)
+  - `email`: User's email address (optional)
+- **Description**: Comprehensive onboarding process that:
+  1. Inserts user into database
+  2. Fetches plants from vendor API
+  3. Inserts plants into database
+  4. Fetches devices for each plant
+  5. Filters for inverters (type 1 or 7) and inserts them
+
+#### Get Users List
+- **Route**: `/users/list`
+- **Method**: GET
+- **Description**: Gets a list of all users in the system.
+
+#### Get Plants List
+- **Route**: `/plants/list`
+- **Method**: GET
+- **Query Parameters**:
+  - `username`: Filter plants by username (optional)
+- **Description**: Gets a list of all plants, optionally filtered by username.
+
+#### Get User Dashboard
+- **Route**: `/dashboard`
+- **Method**: GET
+- **Query Parameters**:
+  - `username`: Username to get dashboard for (required)
+- **Description**: Gets dashboard data for a specific user including plant details and summary.
+
+### Plant Energy Summary
+
+#### Get Plant Summary
+- **Route**: `/plant/summary`
+- **Method**: GET
+- **Query Parameters**:
+  - `plant_id`: Plant ID to get summary for (required)
+- **Description**: Gets the energy summary for a specific plant.
+
+#### Ingest Plant Summary
+- **Route**: `/plant/summary/ingest`
+- **Method**: GET
+- **Query Parameters**:
+  - `plant_id`: Plant ID to fetch and store summary for (required)
+- **Description**: Fetches plant energy summary from Growatt API and stores it in the database.
+
+#### Batch Ingest Plants Summary
+- **Route**: `/plants/summary/batch-ingest`
+- **Method**: GET
+- **Description**: Fetches and stores energy summaries for all plants in the system.
 
 ## Timezone Handling
 
