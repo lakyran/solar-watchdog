@@ -607,6 +607,60 @@ class AzureDB:
             if conn:
                 self.connection_pool.putconn(conn)
     
+    def get_first_record_date_for_device(self, device_sn):
+        """
+        Get the date of the oldest record for a specific device
+        
+        Args:
+            device_sn (str): Device serial number
+            
+        Returns:
+            str: Date of the first record in YYYY-MM-DD format, or None if no records exist
+        """
+        if not self.connection_pool:
+            self.logger.error("Database connection pool not available")
+            raise ValueError("Database connection pool not available")
+        
+        conn = None
+        cursor = None
+        
+        try:
+            # Get connection from pool
+            conn = self.connection_pool.getconn()
+            cursor = conn.cursor()
+            
+            self.logger.debug(f"Querying first record date for device: {device_sn}")
+            
+            # Query to get the oldest date for the device
+            cursor.execute(
+                """
+                SELECT TO_CHAR(MIN(datetime), 'YYYY-MM-DD') as first_date
+                FROM power_gen_history 
+                WHERE device_sn = %s
+                """,
+                (device_sn,)
+            )
+            
+            # Fetch the result
+            result = cursor.fetchone()
+            if result:
+                self.logger.info(f"First record date for device {device_sn}: {result[0]}")
+                return result[0]  # Return the date string
+            else:
+                self.logger.info(f"No records found for device {device_sn}")
+                return None  # No records found
+            
+        except Exception as e:
+            error_msg = f"Database error retrieving first record date: {str(e)}"
+            self.logger.error(error_msg)
+            raise Exception(error_msg)
+        
+        finally:
+            if cursor:
+                cursor.close()
+            if conn:
+                self.connection_pool.putconn(conn)
+    
     def delete_device_records_by_date(self, device_sn, date):
         """
         Delete all records for a specific device on a specific date from the power_gen_history table

@@ -472,9 +472,19 @@ class Watchdog:
                     # Use the day after the latest analysis as the start date
                     start_date = (latest_date + timedelta(days=1)).strftime('%Y-%m-%d')
             else:
-                # Default to 15 days before end_date if no previous analysis exists
-                end_date_obj = datetime.strptime(end_date, '%Y-%m-%d').replace(tzinfo=self.ist_timezone)
-                start_date = (end_date_obj - timedelta(days=15)).strftime('%Y-%m-%d')
+                # If no latest analysis date, try to get the first record date from the database
+                first_record_date = self.db_client.get_first_record_date_for_device(device_sn)
+                self.logger.info(f"First record date for device {device_sn}: {first_record_date}")
+                
+                if first_record_date:
+                    # Use the first record date as the start date
+                    start_date = first_record_date
+                    self.logger.info(f"Using first record date as start date: {start_date}")
+                else:
+                    # Default to 15 days before end_date if no previous analysis exists and no historical data
+                    end_date_obj = datetime.strptime(end_date, '%Y-%m-%d').replace(tzinfo=self.ist_timezone)
+                    start_date = (end_date_obj - timedelta(days=15)).strftime('%Y-%m-%d')
+                    self.logger.info(f"No first record date found, using default 15 days before end date: {start_date}")
         
         self.logger.info(f"Analyzing data for device {device_sn} from {start_date} to {end_date}")
         
