@@ -1334,12 +1334,13 @@ class AzureDB:
             if conn:
                 self.connection_pool.putconn(conn)
     
-    def get_current_output_for_user(self, username):
+    def get_current_output_for_user(self, username, plant_id=None):
         """
         Get the current power output (pac) from the latest entry in power_gen_history for a user
         
         Args:
             username (str): Username to fetch current output for
+            plant_id (str, optional): Plant ID to filter results. If None, returns for all plants of the user.
             
         Returns:
             float: Current power output in Watts (W) or None if not found
@@ -1356,31 +1357,52 @@ class AzureDB:
             conn = self.connection_pool.getconn()
             cursor = conn.cursor()
             
-            self.logger.debug(f"Querying current power output for user: {username}")
-            
-            # Query to get the latest pac value for the user
-            cursor.execute(
-                """
-                SELECT pac
-                FROM power_gen_history
-                WHERE user_name = %s
-                ORDER BY datetime DESC
-                LIMIT 1
-                """,
-                (username,)
-            )
+            if plant_id:
+                self.logger.debug(f"Querying current power output for user: {username}, plant: {plant_id}")
+                
+                # Query to get the latest pac value for the user and plant
+                cursor.execute(
+                    """
+                    SELECT pac
+                    FROM power_gen_history
+                    WHERE user_name = %s AND plant_id = %s
+                    ORDER BY datetime DESC
+                    LIMIT 1
+                    """,
+                    (username, plant_id)
+                )
+            else:
+                self.logger.debug(f"Querying current power output for user: {username} (all plants)")
+                
+                # Query to get the latest pac value for the user
+                cursor.execute(
+                    """
+                    SELECT pac
+                    FROM power_gen_history
+                    WHERE user_name = %s
+                    ORDER BY datetime DESC
+                    LIMIT 1
+                    """,
+                    (username,)
+                )
             
             # Fetch the result
             result = cursor.fetchone()
             
             if not result:
-                self.logger.info(f"No power generation history found for user: {username}")
+                if plant_id:
+                    self.logger.info(f"No power generation history found for user: {username}, plant: {plant_id}")
+                else:
+                    self.logger.info(f"No power generation history found for user: {username}")
                 return None
             
             # Extract the pac value
             pac = result[0]
             
-            self.logger.info(f"Retrieved current power output for user {username}: {pac}W")
+            if plant_id:
+                self.logger.info(f"Retrieved current power output for user {username}, plant {plant_id}: {pac}W")
+            else:
+                self.logger.info(f"Retrieved current power output for user {username}: {pac}W")
             return pac
             
         except Exception as e:

@@ -800,13 +800,14 @@ class Watchdog:
 
     def get_user_dashboard_data(self, username):
         """
-        Get dashboard data for a specific user, assuming each user has exactly one plant
+        Get dashboard data for a specific user
         
         Args:
             username (str): Username to fetch dashboard data for
             
         Returns:
-            dict: Dashboard data including the user's plant details and summary
+            dict: Dashboard data including all the user's plants details and summaries.
+                 For backward compatibility, also includes first plant's details at the top level.
         """
         try:
             self.logger.info(f"Getting dashboard data for user: {username}")
@@ -817,7 +818,7 @@ class Watchdog:
                 self.logger.error(error_msg)
                 return {"status": "error", "message": error_msg}, 400
             
-            # Step 1: Get the plant for the user
+            # Step 1: Get all plants for the user
             plants = self.db_client.get_plants_list(username)
             
             if not plants or len(plants) == 0:
@@ -827,68 +828,81 @@ class Watchdog:
                     "message": f"No plant found for user: {username}"
                 }, 404
             
-            # Get the first plant (assuming one plant per user)
-            plant = plants[0]
-            plant_id = plant.get('plant_id')
-            
-            if not plant_id:
-                error_msg = f"Invalid plant data for user: {username}"
-                self.logger.error(error_msg)
-                return {"status": "error", "message": error_msg}, 500
-            
-            # Step 2: Get plant summary
-            plant_summary = self.db_client.get_plant_energy_summary(plant_id)
-            
-            # If plant_summary is None, initialize it as an empty dict
-            if plant_summary is None:
-                plant_summary = {}
-            
-            # Step 3: Get current power output and add it to plant summary
-            current_power = self.get_current_power_for_user(username)
-            plant_summary['current_power'] = current_power
-            
-            # Return the dashboard data
-            return {
+            # Initialize response structure
+            response = {
                 "status": "success",
                 "username": username,
-                "plant_details": plant,
-                "plant_summary": plant_summary
+                "plants": []
             }
+            
+            # Process each plant
+            for plant in plants:
+                plant_id = plant.get('plant_id')
+                
+                if not plant_id:
+                    self.logger.warning(f"Invalid plant data found for user: {username}, skipping")
+                    continue
+                
+                # Get plant summary
+                plant_summary = self.db_client.get_plant_energy_summary(plant_id)
+                
+                # If plant_summary is None, initialize it as an empty dict
+                if plant_summary is None:
+                    plant_summary = {}
+                
+                # Get current power specific to this plant
+                plant_current_power = self.get_current_power_for_user(username, plant_id)
+                plant_summary['current_power'] = plant_current_power
+                
+                # Add plant to the plants array
+                response["plants"].append({
+                    "plant_details": plant,
+                    "plant_summary": plant_summary
+                })
+            
+            # For backward compatibility, include first plant data at top level
+            if len(response["plants"]) > 0:
+                response["plant_details"] = response["plants"][0]["plant_details"]
+                response["plant_summary"] = response["plants"][0]["plant_summary"]
+            
+            # Return the dashboard data
+            return response
                 
         except Exception as e:
             error_msg = f"Error getting dashboard data for user {username}: {str(e)}"
             self.logger.error(error_msg)
             return {"status": "error", "message": error_msg}, 500
 
-    def get_current_power_for_user(self, username):
+    def get_current_power_for_user(self, username, plant_id=None):
         """
         Get the current power output for a specific user
         
         Args:
             username (str): The username to get current power for
+            plant_id (str, optional): Plant ID to filter results. If None, returns for all plants of the user.
             
         Returns:
             float: Current power output in Watts (W)
         """
         try:
-            self.logger.info(f"Getting current power output for user: {username}")
+            self.logger.info(f"Getting current power output for user: {username}{' for plant: ' + plant_id if plant_id else ''}")
             
             # Get current output in watts from the database
-            current_output_watts = self.db_client.get_current_output_for_user(username)
+            current_output_watts = self.db_client.get_current_output_for_user(username, plant_id)
             
             # Convert watts to kilowatts (1 kW = 1000 W)
             if current_output_watts is not None:
                 current_power_kw = current_output_watts / 1000.0
                 # Round to 2 decimal places
                 current_power_kw = round(current_power_kw, 2)
-                self.logger.info(f"Current power for user {username}: {current_power_kw} kW")
+                self.logger.info(f"Current power for user {username}{' plant ' + plant_id if plant_id else ''}: {current_power_kw} kW")
                 return current_power_kw
             else:
-                self.logger.info(f"No current power data available for user {username}, returning 0")
+                self.logger.info(f"No current power data available for user {username}{' plant ' + plant_id if plant_id else ''}, returning 0")
                 return 0.0
         
         except Exception as e:
-            error_msg = f"Error getting current power for user {username}: {str(e)}"
+            error_msg = f"Error getting current power for user {username}{' plant ' + plant_id if plant_id else ''}: {str(e)}"
             self.logger.error(error_msg)
             raise Exception(error_msg)
             
