@@ -871,14 +871,22 @@ class Watchdog:
             float: Current power output in Watts (W)
         """
         try:
-            current_power = self.db_client.get_current_output_for_user(username)
+            self.logger.info(f"Getting current power output for user: {username}")
             
-            return {
-                'username': username,
-                'current_power': current_power,
-                'unit': 'W'
-            }
+            # Get current output in watts from the database
+            current_output_watts = self.db_client.get_current_output_for_user(username)
             
+            # Convert watts to kilowatts (1 kW = 1000 W)
+            if current_output_watts is not None:
+                current_power_kw = current_output_watts / 1000.0
+                # Round to 2 decimal places
+                current_power_kw = round(current_power_kw, 2)
+                self.logger.info(f"Current power for user {username}: {current_power_kw} kW")
+                return current_power_kw
+            else:
+                self.logger.info(f"No current power data available for user {username}, returning 0")
+                return 0.0
+        
         except Exception as e:
             error_msg = f"Error getting current power for user {username}: {str(e)}"
             self.logger.error(error_msg)
