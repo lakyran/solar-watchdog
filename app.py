@@ -303,6 +303,20 @@ def get_inverters_list():
         # Get the list of inverters from the database
         inverters = watchdog.db_client.get_inverters_list(username)
         
+        # Get the list of plants (will be filtered by username if provided)
+        plants = watchdog.db_client.get_plants_list(username)
+        
+        # Create a dictionary of plants by plant_id for easy lookup
+        plants_dict = {plant['plant_id']: plant for plant in plants}
+        
+        # Add plant details to each inverter
+        for inverter in inverters:
+            plant_id = inverter.get('plant_id')
+            if plant_id and plant_id in plants_dict:
+                inverter['plant_details'] = plants_dict[plant_id]
+            else:
+                inverter['plant_details'] = None
+        
         # Return the list as JSON
         return jsonify({
             'status': 'success',

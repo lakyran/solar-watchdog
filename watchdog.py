@@ -900,7 +900,7 @@ class Watchdog:
             else:
                 self.logger.info(f"No current power data available for user {username}{' plant ' + plant_id if plant_id else ''}, returning 0")
                 return 0.0
-        
+                
         except Exception as e:
             error_msg = f"Error getting current power for user {username}{' plant ' + plant_id if plant_id else ''}: {str(e)}"
             self.logger.error(error_msg)
@@ -1175,12 +1175,12 @@ class Watchdog:
                         else:
                             day_summary['error'] = str(error_data)
                             
-                        # If there's a rate limit error, wait longer
-                        if isinstance(error_data, dict) and 'error' in error_data:
-                            error_msg = error_data['error']
-                            if 'error_frequently_access' in error_msg:
-                                self.logger.warning(f"API rate limit hit for device {device_sn}. Stopping historical data bootstrap for this device.")
-                                break
+                            # If there's a rate limit error, wait longer
+                            if isinstance(error_data, dict) and 'error' in error_data:
+                                error_msg = error_data['error']
+                                if 'error_frequently_access' in error_msg:
+                                    self.logger.warning(f"API rate limit hit for device {device_sn}. Stopping historical data bootstrap for this device.")
+                                    break
                     else:
                         # For normal dictionary responses
                         day_summary['status'] = result.get('status', 'unknown')
