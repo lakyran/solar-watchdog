@@ -892,6 +892,7 @@ class Watchdog:
         3. Inserting each plant into the database
         4. Fetching devices for each plant
         5. Inserting inverters (device type 1 or 7) into the database
+        6. Bootstrap historical data ingestion for all inverters
         
         Args:
             username (str): Username for the new user
@@ -913,7 +914,8 @@ class Watchdog:
                 'plants': [],
                 'inverters_count': 0,
                 'inverters': [],
-                'status': 'success'
+                'status': 'success',
+                'history_bootstrap': []
             }
             
             # Step 1: Insert user into database
@@ -983,10 +985,10 @@ class Watchdog:
                         }
                         summary['plants'].append(plant_summary)
                     else:
-                        self.logger.warning(f"Failed to insert plant {plant_name} (ID: {plant_id}): {plant_result['message']}")
+                        self.logger.error(f"Failed to insert plant {plant_name} (ID: {plant_id}): {plant_result['message']}")
                         continue
                 except Exception as e:
-                    self.logger.warning(f"Failed to insert plant {plant_name} (ID: {plant_id}): {str(e)}")
+                    self.logger.error(f"Failed to insert plant {plant_name} (ID: {plant_id}): {str(e)}")
                     continue
                 
                 # Step 4: Fetch devices for this plant
@@ -995,7 +997,7 @@ class Watchdog:
                     devices = self.growatt_client.fetch_plant_devices_list(plant_id)
                     self.logger.info(f"Found {len(devices)} devices for plant {plant_name} (ID: {plant_id})")
                 except Exception as e:
-                    self.logger.warning(f"Failed to fetch devices for plant {plant_name} (ID: {plant_id}): {str(e)}")
+                    self.logger.error(f"Failed to fetch devices for plant {plant_name} (ID: {plant_id}): {str(e)}")
                     continue
                 
                 # Step 5: Filter and insert inverters (device type 1 or 7)
@@ -1037,10 +1039,34 @@ class Watchdog:
                                 'device_type': device_type
                             })
                         else:
-                            self.logger.warning(f"Failed to insert inverter {device_sn}: {inverter_result['message']}")
+                            self.logger.error(f"Failed to insert inverter {device_sn}: {inverter_result['message']}")
                     except Exception as e:
-                        self.logger.warning(f"Failed to insert inverter {device_sn}: {str(e)}")
+                        self.logger.error(f"Failed to insert inverter {device_sn}: {str(e)}")
                 
+            # Step 6: Bootstrap historical data ingestion for all inverters
+            self.logger.info(f"Step 6: Bootstrapping historical data ingestion for {summary['inverters_count']} inverters")
+            
+            for inverter in summary['inverters']:
+                device_sn = inverter['device_sn']
+                try:
+                    # Bootstrap historical data for this inverter
+                    bootstrap_result = self.bootstrap_history_ingestion_for_new_user(device_sn)
+                    summary['history_bootstrap'].append({
+                        'device_sn': device_sn,
+                        'result': bootstrap_result
+                    })
+                except Exception as e:
+                    self.logger.error(f"Failed to bootstrap history for inverter {device_sn}: {str(e)}")
+                    summary['history_bootstrap'].append({
+                        'device_sn': device_sn,
+                        'status': 'error',
+                        'error': str(e)
+                    })
+                
+                # Add a small delay to avoid overwhelming the API
+                import time
+                time.sleep(2)
+            
             # Return the complete summary
             self.logger.info(f"Completed onboarding for user {username}: {summary['plants_count']} plants, {summary['inverters_count']} inverters")
             return summary
@@ -1052,4 +1078,119 @@ class Watchdog:
                 'status': 'error',
                 'message': error_msg,
                 'user': {'username': username, 'user_id': user_id, 'vendor': vendor}
+            }
+            
+    def bootstrap_history_ingestion_for_new_user(self, device_sn):
+        """
+        Bootstrap historical data ingestion for a newly onboarded inverter.
+        Fetches and stores generation history for the past 30 days.
+        
+        Args:
+            device_sn (str): Device serial number of the inverter
+            
+        Returns:
+            dict: Summary of the bootstrapping process
+        """
+        try:
+            self.logger.info(f"Starting historical data bootstrap for device: {device_sn}")
+            
+            # Calculate start and end dates
+            end_date = self.get_current_time_ist()
+            start_date = end_date - timedelta(days=30)
+            
+            # Format dates as strings
+            end_date_str = end_date.strftime('%Y-%m-%d')
+            
+            # Summary to track progress
+            summary = {
+                'device_sn': device_sn,
+                'start_date': start_date.strftime('%Y-%m-%d'),
+                'end_date': end_date_str,
+                'days_processed': 0,
+                'days_total': 31,  # 30 days + today
+                'days_with_data': 0,
+                'days_details': []
+            }
+            
+            # Process each day
+            current_date = start_date
+            while current_date <= end_date:
+                date_str = current_date.strftime('%Y-%m-%d')
+                self.logger.info(f"Bootstrapping history for device {device_sn} on {date_str}")
+                
+                try:
+                    # Fetch and store history for this date
+                    result = self.fetch_and_store_device_generation_history(
+                        device_sn=device_sn,
+                        date_str=date_str,
+                        overwrite=False,
+                        store_records=True
+                    )
+                    
+                    # Initialize day summary with just the date
+                    day_summary = {
+                        'date': date_str
+                    }
+                    
+                    # Check if it's a tuple with an error
+                    if isinstance(result, tuple) and len(result) > 1:
+                        error_data, _ = result
+                        day_summary['status'] = 'error'
+                        if isinstance(error_data, dict):
+                            day_summary['error'] = error_data.get('error', 'Unknown error')
+                        else:
+                            day_summary['error'] = str(error_data)
+                            
+                        # If there's a rate limit error, wait longer
+                        if isinstance(error_data, dict) and 'error' in error_data:
+                            error_msg = error_data['error']
+                            if 'error_frequently_access' in error_msg:
+                                self.logger.warning(f"API rate limit hit for device {device_sn}. Stopping historical data bootstrap for this device.")
+                                break
+                    else:
+                        # For normal dictionary responses
+                        day_summary['status'] = result.get('status', 'unknown')
+                        
+                        # Add counts if successful
+                        if result.get('status') == 'success':
+                            day_summary['entries_count'] = result.get('entries_count', 0)
+                            summary['days_with_data'] += 1
+                    
+                    summary['days_details'].append(day_summary)
+                    
+                except Exception as e:
+                    self.logger.error(f"Error bootstrapping history for date {date_str}: {str(e)}")
+                    summary['days_details'].append({
+                        'date': date_str,
+                        'status': 'error',
+                        'error': str(e)
+                    })
+                
+                # Move to next day
+                current_date += timedelta(days=1)
+                summary['days_processed'] += 1
+                
+                # Add sleep to avoid hammering the API
+                import time
+                time.sleep(1)
+            
+            self.logger.info(f"Completed historical data bootstrap for device {device_sn}: "
+                           f"Processed {summary['days_processed']} days, "
+                           f"Found data for {summary['days_with_data']} days")
+            
+            # Add overall status
+            if summary['days_with_data'] > 0:
+                summary['status'] = 'success'
+            else:
+                summary['status'] = 'no_data'
+                
+            return summary
+            
+        except Exception as e:
+            error_msg = f"Error bootstrapping historical data for device {device_sn}: {str(e)}"
+            self.logger.error(error_msg)
+            return {
+                'status': 'error',
+                'device_sn': device_sn,
+                'message': error_msg
             }

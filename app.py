@@ -329,9 +329,13 @@ def batch_ingest_inverters_history():
             store_records = False
         else:
             store_records = True
+        device_sn = request.args.get('device_sn')
         
         # Get the list of all inverters
-        inverters = watchdog.db_client.get_inverters_list()
+        if device_sn:
+            inverters = [watchdog.db_client.get_inverter_record(device_sn)]
+        else:
+            inverters = watchdog.db_client.get_inverters_list()
         
         # Track results for each inverter
         results = []

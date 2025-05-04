@@ -411,7 +411,7 @@ class GrowattAPI:
         
         try:
             # Use the existing call_api method
-            response = self.call_api(endpoint, method='GET', params=params)
+            response = self.call_api(endpoint, method='POST', params=params)
             
             # Validate response structure
             if not isinstance(response, dict):
