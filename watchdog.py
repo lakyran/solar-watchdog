@@ -898,9 +898,10 @@ class Watchdog:
         1. Inserting the user into the database
         2. Fetching their plants from Growatt
         3. Inserting each plant into the database
-        4. Fetching devices for each plant
-        5. Inserting inverters (device type 1 or 7) into the database
-        6. Bootstrap historical data ingestion for all inverters
+        4. Fetching and storing plant summary for each plant
+        5. Fetching devices for each plant
+        6. Inserting inverters (device type 1 or 7) into the database
+        7. Bootstrap historical data ingestion for all inverters
         
         Args:
             username (str): Username for the new user
@@ -998,9 +999,20 @@ class Watchdog:
                 except Exception as e:
                     self.logger.error(f"Failed to insert plant {plant_name} (ID: {plant_id}): {str(e)}")
                     continue
+
+                # Step 4: Fetch and store plant summary
+                self.logger.info(f"Step 4: Fetching and storing summary for plant {plant_name} (ID: {plant_id})")
+                try:
+                    summary_result = self.fetch_and_store_plant_summary(plant_id)
+                    if isinstance(summary_result, tuple) or summary_result.get('status') != 'success':
+                        self.logger.warning(f"Plant summary fetch for {plant_name} (ID: {plant_id}) was not successful: {summary_result}")
+                    else:
+                        self.logger.info(f"Plant summary for {plant_name} (ID: {plant_id}) fetched successfully")
+                except Exception as e:
+                    self.logger.error(f"Failed to fetch summary for plant {plant_name} (ID: {plant_id}): {str(e)}")
                 
-                # Step 4: Fetch devices for this plant
-                self.logger.info(f"Step 4: Fetching devices for plant {plant_name} (ID: {plant_id})")
+                # Step 5: Fetch devices for this plant
+                self.logger.info(f"Step 5: Fetching devices for plant {plant_name} (ID: {plant_id})")
                 try:
                     devices = self.growatt_client.fetch_plant_devices_list(plant_id)
                     self.logger.info(f"Found {len(devices)} devices for plant {plant_name} (ID: {plant_id})")
@@ -1008,8 +1020,8 @@ class Watchdog:
                     self.logger.error(f"Failed to fetch devices for plant {plant_name} (ID: {plant_id}): {str(e)}")
                     continue
                 
-                # Step 5: Filter and insert inverters (device type 1 or 7)
-                self.logger.info(f"Step 5: Filtering and inserting inverters from {len(devices)} devices")
+                # Step 6: Filter and insert inverters (device type 1 or 7)
+                self.logger.info(f"Step 6: Filtering and inserting inverters from {len(devices)} devices")
                 
                 inverters = [device for device in devices if device.get('type') in [1, 7]]
                 plant_summary['devices_count'] = len(inverters)
@@ -1051,8 +1063,8 @@ class Watchdog:
                     except Exception as e:
                         self.logger.error(f"Failed to insert inverter {device_sn}: {str(e)}")
                 
-            # Step 6: Bootstrap historical data ingestion for all inverters
-            self.logger.info(f"Step 6: Bootstrapping historical data ingestion for {summary['inverters_count']} inverters")
+            # Step 7: Bootstrap historical data ingestion for all inverters
+            self.logger.info(f"Step 7: Bootstrapping historical data ingestion for {summary['inverters_count']} inverters")
             
             for inverter in summary['inverters']:
                 device_sn = inverter['device_sn']
