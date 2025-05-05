@@ -409,6 +409,7 @@ class GrowattAIAgent:
                 # Try to match patterns like "25 minutes", "1 hour 15 minutes", etc.
                 hours_match = re.search(r'(\d+)\s*(?:hour|hr|h)s?', duration_str, re.IGNORECASE)
                 minutes_match = re.search(r'(\d+)\s*(?:minute|min|m)s?', duration_str, re.IGNORECASE)
+                seconds_match = re.search(r'(\d+)\s*(?:second|sec|s)s?', duration_str, re.IGNORECASE)
                 
                 # Calculate total minutes
                 total_minutes = 0
@@ -416,9 +417,19 @@ class GrowattAIAgent:
                     total_minutes += int(hours_match.group(1)) * 60
                 if minutes_match:
                     total_minutes += int(minutes_match.group(1))
+                if seconds_match and not (hours_match or minutes_match):
+                    # Only seconds specified, convert to minutes
+                    total_seconds = int(seconds_match.group(1))
+                    if total_seconds < 60:
+                        # Less than a minute, prune this event
+                        continue
+                    total_minutes += total_seconds // 60
+                    # If there are leftover seconds, round up to 1 minute
+                    if total_seconds % 60 != 0:
+                        total_minutes += 1
                 
                 # If we couldn't parse the duration or it's >= min_duration_minutes, keep the event
-                if not (hours_match or minutes_match) or total_minutes >= min_duration_minutes:
+                if not (hours_match or minutes_match or seconds_match) or total_minutes >= min_duration_minutes:
                     filtered_events.append(event)
             else:
                 # If there's no total_duration field, keep the event
