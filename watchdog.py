@@ -469,8 +469,8 @@ class Watchdog:
                         self.logger.info(f"Analysis already completed for today and outside operating hours")
                         return {'status': 'success', 'message': 'Analysis already completed for today'}, 200
                 else:
-                    # Use the day after the latest analysis as the start date
-                    start_date = (latest_date + timedelta(days=1)).strftime('%Y-%m-%d')
+                    # Use the day of latest analysis as the start date
+                    start_date = latest_date.strftime('%Y-%m-%d')
             else:
                 # If no latest analysis date, try to get the first record date from the database
                 first_record_date = self.db_client.get_first_record_date_for_device(device_sn)

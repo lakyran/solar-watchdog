@@ -298,8 +298,8 @@ class AzureDB:
                         (event_id, created_at, user_name, user_id, vendor, device_sn, device_oem, device_type, 
                         plant_id, event_date, start_time, end_time, total_duration, fault_details, 
                         root_cause_analysis, power_generation_during_disruption, 
-                        parameters_behaviour_during_disruption, is_ongoing_event, further_action_required)
-                        VALUES (gen_random_uuid(), %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                        parameters_behaviour_during_disruption, is_ongoing_event, further_action_required, impact_of_event)
+                        VALUES (gen_random_uuid(), %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                         ON CONFLICT (device_sn, event_date, start_time) DO UPDATE SET
                             end_time = EXCLUDED.end_time,
                             total_duration = EXCLUDED.total_duration,
@@ -308,7 +308,8 @@ class AzureDB:
                             power_generation_during_disruption = EXCLUDED.power_generation_during_disruption,
                             parameters_behaviour_during_disruption = EXCLUDED.parameters_behaviour_during_disruption,
                             is_ongoing_event = EXCLUDED.is_ongoing_event,
-                            further_action_required = EXCLUDED.further_action_required
+                            further_action_required = EXCLUDED.further_action_required,
+                            impact_of_event = EXCLUDED.impact_of_event
                         """,
                         (
                             created_at,
@@ -328,7 +329,8 @@ class AzureDB:
                             event.get('power_generation_during_disruption', ''),
                             event.get('parameters_behaviour_during_disruption', ''),
                             event.get('is_ongoing_event', ''),
-                            further_action
+                            further_action,
+                            event.get('impact_of_event', '')
                         )
                     )
                     
