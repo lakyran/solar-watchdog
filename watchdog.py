@@ -1,5 +1,3 @@
-import os
-import json
 from datetime import datetime, timedelta, timezone
 import pytz
 from flask import jsonify, request
@@ -7,7 +5,7 @@ import logging
 from growatt import GrowattAPI
 from azure_db import AzureDB
 from ai_agent import GrowattAIAgent
-import math
+
 class Watchdog:
     # Task status constants
     TASK_STATUS = {

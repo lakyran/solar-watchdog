@@ -5,7 +5,7 @@ from dotenv import load_dotenv
 import json
 import openmeteo_requests
 import requests_cache
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 import pytz
 import pandas as pd
 import re

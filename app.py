@@ -1,15 +1,10 @@
 from flask import Flask, jsonify, request, render_template, send_from_directory
-import os
 import logging
 from dotenv import load_dotenv
-from ai_agent import GrowattAIAgent
-import asyncio
 from watchdog import Watchdog
 import time
-from datetime import datetime, timedelta
+from datetime import datetime
 import pytz
-import threading
-import uuid
 
 # Configure logging
 logging.basicConfig(

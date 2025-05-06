@@ -1,7 +1,6 @@
 import os
 import logging
 from psycopg2 import pool
-import json
 from datetime import datetime, timezone
 import pytz
 
