@@ -751,6 +751,33 @@ def batch_analyze_inverters_disruptions():
         
     except Exception as e:
         return jsonify({'status': 'error', 'message': str(e)}), 500
+
+@app.route('/dashboard', methods=['GET'])
+def get_user_dashboard():
+    """Get dashboard data for a specific user including their plant details and summary"""
+    try:
+        # Get required username parameter
+        username = request.args.get('username')
+        
+        # Validate the parameter
+        if not username:
+            return jsonify({
+                'status': 'error',
+                'message': 'username parameter is required'
+            }), 400
+        
+        # Call the watchdog method to get dashboard data
+        result = watchdog.get_user_dashboard_data(username)
+        
+        # If the result is a tuple with a status code, handle the error
+        if isinstance(result, tuple) and len(result) > 1:
+            return jsonify(result[0]), result[1]
+            
+        # Return the result as JSON
+        return jsonify(result)
+        
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
     
 @app.route('/device/disruptions/view', methods=['GET'])
 def view_device_disruption_events():
@@ -849,33 +876,6 @@ def view_device_disruption_events():
                               city='--',
                               error=str(e))
 
-@app.route('/dashboard', methods=['GET'])
-def get_user_dashboard():
-    """Get dashboard data for a specific user including their plant details and summary"""
-    try:
-        # Get required username parameter
-        username = request.args.get('username')
-        
-        # Validate the parameter
-        if not username:
-            return jsonify({
-                'status': 'error',
-                'message': 'username parameter is required'
-            }), 400
-        
-        # Call the watchdog method to get dashboard data
-        result = watchdog.get_user_dashboard_data(username)
-        
-        # If the result is a tuple with a status code, handle the error
-        if isinstance(result, tuple) and len(result) > 1:
-            return jsonify(result[0]), result[1]
-            
-        # Return the result as JSON
-        return jsonify(result)
-        
-    except Exception as e:
-        return jsonify({'status': 'error', 'message': str(e)}), 500
-
 @app.route('/devices/efficiency/view', methods=['GET'])
 def view_efficiency_snapshot():
     try:
@@ -911,6 +911,131 @@ def view_efficiency_snapshot():
             plant_hour_labels=[],
             error=str(e)
         )
+
+@app.route('/plant/energy/daily/ingest', methods=['GET'])
+def ingest_plant_energy_daily_data():
+    """Fetch and store daily energy generation data for a plant over a date range"""
+    try:
+        # Get required plant_id parameter
+        plant_id = request.args.get('plant_id')
+        
+        # Get optional date parameters with defaults
+        start_date = request.args.get('start_date')
+        end_date = request.args.get('end_date')
+        
+        # Validate the required parameter
+        if not plant_id:
+            return jsonify({
+                'status': 'error',
+                'message': 'plant_id parameter is required'
+            }), 400
+        
+        # Call the watchdog method to fetch and store plant energy data
+        result = watchdog.fetch_and_store_plant_energy_daily_generation(
+            plant_id=plant_id,
+            start_date=start_date,
+            end_date=end_date
+        )
+        
+        # If the result is a tuple with a status code, handle the error
+        if isinstance(result, tuple) and len(result) > 1:
+            return jsonify(result[0]), result[1]
+            
+        # Return the result as JSON
+        return jsonify(result)
+        
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+@app.route('/plants/energy/daily/batch-ingest', methods=['GET'])
+def batch_ingest_plant_energy_daily_data():
+    """Fetch and store daily energy generation data for all plants"""
+    try:
+        # Get optional date parameters with defaults
+        start_date = request.args.get('start_date')
+        end_date = request.args.get('end_date')
+        
+        # Get the list of all plants
+        plants = watchdog.db_client.get_plants_list()
+        
+        if not plants:
+            return jsonify({
+                'status': 'error',
+                'message': 'No plants found in the system'
+            }), 404
+        
+        # Track results for each plant
+        results = []
+        successful_plants = 0
+        failed_plants = 0
+        
+        # Process each plant
+        for plant in plants:
+            plant_id = plant.get('plant_id')
+            
+            # Skip if no plant_id
+            if not plant_id:
+                continue
+                
+            try:
+                # Fetch and store data for this plant
+                result = watchdog.fetch_and_store_plant_energy_daily_generation(
+                    plant_id=plant_id,
+                    start_date=start_date,
+                    end_date=end_date
+                )
+                
+                # Handle case where response is a tuple (error response)
+                if isinstance(result, tuple) and len(result) > 1:
+                    error_data, status_code = result
+                    # Create a standardized error result
+                    plant_result = {
+                        'plant_id': plant_id,
+                        'user_name': plant.get('user_name', ''),
+                        'status': 'error',
+                        'error': error_data.get('message', 'Unknown error'),
+                        'status_code': status_code
+                    }
+                    failed_plants += 1
+                else:
+                    # Success case
+                    plant_result = {
+                        'plant_id': plant_id,
+                        'user_name': plant.get('user_name', ''),
+                        'status': 'success',
+                        'api_data': result.get('api_result', {}),
+                        'db_result': result.get('db_result', {})
+                    }
+                    successful_plants += 1
+                
+                # Add result to results list
+                results.append(plant_result)
+                
+                # Wait for 1 second before processing the next plant to avoid API rate limits
+                time.sleep(1)
+                
+            except Exception as e:
+                # If one plant fails, continue with others but log the error
+                logger.error(f"Error processing plant {plant_id}: {str(e)}")
+                results.append({
+                    'plant_id': plant_id,
+                    'user_name': plant.get('user_name', ''),
+                    'status': 'error',
+                    'error': str(e)
+                })
+                failed_plants += 1
+        
+        # Return the aggregated results
+        return jsonify({
+            'status': 'success',
+            'total_plants': len(plants),
+            'successful_plants': successful_plants,
+            'failed_plants': failed_plants,
+            'results': results
+        })
+        
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
 
 if __name__ == '__main__':
     app.run()

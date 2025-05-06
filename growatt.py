@@ -484,3 +484,53 @@ class GrowattAPI:
         except Exception as e:
             self.logger.error(f"Error fetching plant devices: {str(e)}")
             raise Exception(f"Failed to fetch devices for plant {plant_id}: {str(e)}")
+    
+    def fetch_plant_energy_data(self, plant_id, start_date, end_date):
+        """
+        Fetch energy generation data for a plant over a date range
+        
+        Args:
+            plant_id (str): Plant ID to fetch energy data for
+            start_date (str): Start date in YYYY-MM-DD format
+            end_date (str): End date in YYYY-MM-DD format
+            time_unit (str, optional): Time unit for the data. Defaults to "day".
+            
+        Returns:
+            list: List of energy data entries (the 'energys' field from the API response)
+            
+        Raises:
+            ValueError: If required parameters are missing
+            Exception: If the API request fails
+        """
+        if not plant_id:
+            raise ValueError("Plant ID is required")
+            
+        if not start_date or not end_date:
+            raise ValueError("Start date and end date are required")
+
+        try:
+            # Call the API endpoint for fetching plant energy data
+            endpoint = '/plant/energy'
+            params = {
+                'plant_id': plant_id,
+                'start_date': start_date,
+                'end_date': end_date,
+                'time_unit': 'day'
+            }
+            
+            # Make the API call
+            self.logger.info(f"Fetching energy data for plant {plant_id} from {start_date} to {end_date}")
+            response = self.call_api(endpoint, method='GET', params=params)
+                
+            # Extract the 'energys' field from the response
+            if 'energys' in response:
+                energys = response['energys']
+                self.logger.info(f"Retrieved {len(energys)} energy data records for plant {plant_id}")
+                return energys
+            else:
+                self.logger.warning(f"No energy data found for plant {plant_id}")
+                return []
+                
+        except Exception as e:
+            self.logger.error(f"Error fetching plant energy data: {str(e)}")
+            raise Exception(f"Failed to fetch plant energy data: {str(e)}")

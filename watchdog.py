@@ -2,6 +2,7 @@ from datetime import datetime, timedelta, timezone
 import pytz
 from flask import jsonify, request
 import logging
+import time
 from growatt import GrowattAPI
 from azure_db import AzureDB
 from ai_agent import GrowattAIAgent
@@ -605,7 +606,6 @@ class Watchdog:
                     current_date += timedelta(days=1)
                     days_processed += 1
                     # Add sleep to avoid hammering the API
-                    import time
                     time.sleep(1)
                     continue
                     
@@ -621,7 +621,6 @@ class Watchdog:
                 days_processed += 1
                 
                 # Add sleep to avoid hammering the API
-                import time
                 time.sleep(1)
             
             # Prepare response
@@ -1127,7 +1126,6 @@ class Watchdog:
                     })
                 
                 # Add a small delay to avoid overwhelming the API
-                import time
                 time.sleep(2)
             
             # Return the complete summary
@@ -1234,7 +1232,6 @@ class Watchdog:
                 summary['days_processed'] += 1
                 
                 # Add sleep to avoid hammering the API
-                import time
                 time.sleep(1)
             
             self.logger.info(f"Completed historical data bootstrap for device {device_sn}: "
@@ -1396,3 +1393,168 @@ class Watchdog:
                 'plant_efficiency_7d_labels': [],
                 'plant_hour_labels': []
             }
+            
+    def fetch_and_store_plant_energy_daily_generation(self, plant_id, start_date=None, end_date=None):
+        """
+        Fetch daily generation summary for a plant from Growatt API and store it in the database
+        
+        Args:
+            plant_id (str): Plant ID to fetch summary for
+            start_date (str, optional): Start date in YYYY-MM-DD format. Defaults to 6 days ago.
+            end_date (str, optional): End date in YYYY-MM-DD format. Defaults to today.
+            
+        Returns:
+            dict: Result containing operation status and database result
+        """
+        try:
+            # Set default dates if not provided
+            current_time = self.get_current_time_ist()
+            if not end_date:
+                end_date = current_time.strftime('%Y-%m-%d')
+            
+            if not start_date:
+                # Default to 6 days ago 
+                start_date = (current_time - timedelta(days=6)).strftime('%Y-%m-%d')
+            
+            self.logger.info(f"Starting fetch_and_store_plant_energy_daily_generation for plant: {plant_id}")
+            self.logger.info(f"Date range: {start_date} to {end_date}")
+
+            # Get plant data from the plants table to get user_name, vendor, and plant_name
+            plant_data = None
+            plants = self.db_client.get_plants_list()
+            for plant in plants:
+                if plant.get('plant_id') == plant_id:
+                    plant_data = plant
+                    break
+            
+            if not plant_data:
+                error_msg = f"No plant record found for plant_id: {plant_id}"
+                self.logger.error(error_msg)
+                return {"status": "error", "message": error_msg}, 404
+            
+            self.logger.info(f"Retrieved plant data: {plant_data.get('plant_name', '')} (ID: {plant_id}), user: {plant_data.get('user_name')}")
+
+            # Get user_name and vendor from plant_data
+            user_name = plant_data.get('user_name', '')
+            vendor = plant_data.get('vendor', 'unisolarpower')
+            plant_name = plant_data.get('plant_name', '')
+            
+            # Parse input dates
+            try:
+                start_date_obj = datetime.strptime(start_date, '%Y-%m-%d')
+                end_date_obj = datetime.strptime(end_date, '%Y-%m-%d')
+                days_difference = (end_date_obj - start_date_obj).days + 1  # Include both start and end dates
+                
+                self.logger.info(f"Processing date range of {days_difference} days using chunking approach")
+                
+                # Initialize tracking variables
+                all_energy_entries = []
+                db_results = []
+                chunk_count = 0
+                current_start = start_date_obj
+                
+                # Process the date range in chunks
+                while current_start <= end_date_obj:
+                    chunk_count += 1
+                    
+                    # Calculate chunk end date (either 6 days after start or the original end date, whichever is earlier)
+                    chunk_end = min(current_start + timedelta(days=6), end_date_obj)
+                    
+                    chunk_start_str = current_start.strftime('%Y-%m-%d')
+                    chunk_end_str = chunk_end.strftime('%Y-%m-%d')
+                    
+                    self.logger.info(f"Processing chunk {chunk_count}: {chunk_start_str} to {chunk_end_str}")
+                    
+                    # Fetch data for this chunk
+                    try:
+                        # Call API for this date range chunk
+                        self.logger.info(f"Calling Growatt API to fetch energy data for plant {plant_id}, chunk {chunk_count}")
+                        energy_data = self.growatt_client.fetch_plant_energy_data(
+                            plant_id=plant_id,
+                            start_date=chunk_start_str,
+                            end_date=chunk_end_str
+                        )
+                        
+                        if energy_data:
+                            self.logger.info(f"Received {len(energy_data)} entries for chunk {chunk_count}")
+                            
+                            # Format the data for database insertion
+                            chunk_entries = []
+                            for entry in energy_data:
+                                date_value = entry['date']
+                                energy_value = entry['energy']
+                                self.logger.debug(f"Processing energy entry: date={date_value}, energy={energy_value}")
+                                
+                                # Create database entry
+                                chunk_entries.append({
+                                    'plant_id': plant_id,
+                                    'plant_name': plant_name,
+                                    'user_name': user_name,
+                                    'vendor': vendor,
+                                    'date': date_value,
+                                    'day_energy': float(energy_value)
+                                })
+                            
+                            # Insert entries for this chunk into the database
+                            if chunk_entries:
+                                self.logger.info(f"Inserting {len(chunk_entries)} entries for chunk {chunk_count}")
+                                chunk_db_result = self.db_client.insert_plant_daily_generation_history(chunk_entries)
+                                db_results.append(chunk_db_result)
+                                all_energy_entries.extend(chunk_entries)
+                                self.logger.info(f"Chunk {chunk_count} database operation completed: inserted={chunk_db_result.get('inserted_records', 0)}, updated={chunk_db_result.get('updated_records', 0)}")
+                            
+                        else:
+                            self.logger.warning(f"No data received for chunk {chunk_count}")
+                        
+                    except Exception as chunk_error:
+                        self.logger.error(f"Error processing chunk {chunk_count}: {str(chunk_error)}")
+                        # Continue with the next chunk
+                    
+                    # Move to the next chunk
+                    current_start = chunk_end + timedelta(days=1)
+                    
+                    # Add a small delay between API calls to avoid rate limiting
+                    time.sleep(1)
+                
+                # Compile final results
+                total_inserted = sum(result.get('inserted_records', 0) for result in db_results if isinstance(result, dict))
+                total_updated = sum(result.get('updated_records', 0) for result in db_results if isinstance(result, dict))
+                
+                self.logger.info(f"All chunks processed. Total entries: {len(all_energy_entries)}, inserted: {total_inserted}, updated: {total_updated}")
+                
+                # Return combined results
+                if not all_energy_entries:
+                    return {
+                        "status": "warning",
+                        "message": "No generation data found for the specified date range",
+                        "plant_id": plant_id,
+                        "start_date": start_date,
+                        "end_date": end_date,
+                        "db_result": None
+                    }
+                
+                return {
+                    "status": "success",
+                    "message": f"Successfully fetched and stored plant generation data for {plant_id}",
+                    "plant_id": plant_id,
+                    "start_date": start_date,
+                    "end_date": end_date,
+                    "chunks_processed": chunk_count,
+                    "entry_count": len(all_energy_entries),
+                    "database_summary": {
+                        "total_inserted": total_inserted,
+                        "total_updated": total_updated,
+                        "total_processed": total_inserted + total_updated
+                    },
+                    "db_results": db_results
+                }
+                
+            except ValueError as date_error:
+                error_msg = f"Error parsing dates: {str(date_error)}"
+                self.logger.error(error_msg)
+                return {"status": "error", "message": error_msg}, 400
+            
+        except Exception as e:
+            error_msg = f"Error fetching and storing plant generation data for {plant_id}: {str(e)}"
+            self.logger.error(error_msg)
+            return {"status": "error", "message": error_msg}, 500

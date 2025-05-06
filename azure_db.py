@@ -1691,4 +1691,118 @@ class AzureDB:
             if cursor:
                 cursor.close()
             if conn:
+                self.connection_pool.putconn(conn)
+                
+    def insert_plant_daily_generation_history(self, generation_entries):
+        """
+        Insert plant daily generation history entries into the plant_daily_generation_history table
+        
+        Args:
+            generation_entries (list): List of dictionaries containing plant daily generation data with keys:
+                                     plant_id, plant_name, user_name, vendor, date, day_energy
+                                     
+        Returns:
+            dict: Result of the operation with status and counts
+        """
+        if not self.connection_pool:
+            self.logger.error("Database connection pool not available")
+            raise ValueError("Database connection pool not available")
+        
+        conn = None
+        cursor = None
+        inserted_count = 0
+        updated_count = 0
+        
+        try:
+            # Get connection from pool
+            conn = self.connection_pool.getconn()
+            cursor = conn.cursor()
+            
+            self.logger.debug(f"Preparing to insert {len(generation_entries)} plant daily generation entries")
+            
+            # Get current timestamp in IST for last_updated_at
+            last_updated_at = self.get_current_time_ist()
+            
+            # Insert each generation entry
+            for entry in generation_entries:
+                # Check required fields are present
+                required_fields = ['plant_id', 'user_name', 'vendor', 'date', 'day_energy']
+                for field in required_fields:
+                    if field not in entry or entry[field] is None:
+                        error_msg = f"Missing required field: {field}"
+                        self.logger.error(error_msg)
+                        raise ValueError(error_msg)
+                
+                # First check if the record exists
+                cursor.execute(
+                    """
+                    SELECT 1 FROM plant_daily_generation_history 
+                    WHERE plant_id = %s AND vendor = %s AND date = %s
+                    LIMIT 1
+                    """,
+                    (entry['plant_id'], entry['vendor'], entry['date'])
+                )
+                
+                # Determine if this will be an insert or update
+                record_exists = cursor.fetchone() is not None
+                
+                # Convert day_energy to float if it's a string
+                day_energy = float(entry['day_energy']) if isinstance(entry['day_energy'], str) else entry['day_energy']
+                
+                # Use ON CONFLICT to handle duplicate entries
+                cursor.execute(
+                    """
+                    INSERT INTO plant_daily_generation_history 
+                    (plant_id, plant_name, user_name, vendor, date, day_energy, last_updated_at)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s)
+                    ON CONFLICT (plant_id, vendor, date) DO UPDATE
+                    SET plant_name = EXCLUDED.plant_name,
+                        user_name = EXCLUDED.user_name,
+                        day_energy = EXCLUDED.day_energy,
+                        last_updated_at = EXCLUDED.last_updated_at
+                    """,
+                    (
+                        entry['plant_id'],
+                        entry.get('plant_name', ''),
+                        entry['user_name'],
+                        entry['vendor'],
+                        entry['date'],
+                        day_energy,
+                        last_updated_at
+                    )
+                )
+                
+                # Increment the appropriate counter based on whether it was an insert or update
+                if record_exists:
+                    updated_count += 1
+                    self.logger.debug(f"Updated existing plant daily generation record for plant {entry['plant_id']} on {entry['date']}")
+                else:
+                    inserted_count += 1
+                    self.logger.debug(f"Inserted new plant daily generation record for plant {entry['plant_id']} on {entry['date']}")
+            
+            # Commit the transaction
+            conn.commit()
+            
+            self.logger.info(f"Successfully processed {len(generation_entries)} plant daily generation entries. Inserted: {inserted_count}, Updated: {updated_count}")
+            
+            return {
+                "status": "success",
+                "inserted_records": inserted_count,
+                "updated_records": updated_count,
+                "total_processed": inserted_count + updated_count
+            }
+            
+        except Exception as e:
+            if conn:
+                conn.rollback()
+            self.logger.error(f"Database error during plant daily generation history insertion: {e}")
+            return {
+                "status": "error",
+                "message": str(e)
+            }
+        
+        finally:
+            if cursor:
+                cursor.close()
+            if conn:
                 self.connection_pool.putconn(conn) 
