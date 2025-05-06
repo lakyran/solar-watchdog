@@ -494,6 +494,8 @@ def batch_ingest_inverters_history():
                     # If date in the result is today, we're done with this device
                     if ingest_result.get('date') == get_current_time_ist().strftime('%Y-%m-%d'):
                         break
+                    elif date:
+                        break
 
                     # Wait for 2 seconds before fetching the next page
                     time.sleep(2)
@@ -763,25 +765,49 @@ def view_device_disruption_events():
         device_sn = request.args.get('device_sn')
         date_str = request.args.get('date', None)
         
-        # Get the list of inverters for the dropdown
+        # Get the list of inverters and plants
         try:
             inverters = watchdog.db_client.get_inverters_list()
+            plants = watchdog.db_client.get_plants_list()
+            plants_dict = {plant['plant_id']: plant for plant in plants}
+            # Augment inverters with plant details
+            for inverter in inverters:
+                plant_id = inverter.get('plant_id')
+                if plant_id and plant_id in plants_dict:
+                    inverter['plant_details'] = plants_dict[plant_id]
+                else:
+                    inverter['plant_details'] = None
         except Exception as e:
-            logger.error(f"Error fetching inverters list: {str(e)}")
+            logger.error(f"Error fetching inverters or plants list: {str(e)}")
             inverters = []
+            plants_dict = {}
         
         # If device_sn is not provided, use the first inverter as default
         selected_device_sn = device_sn
         if not selected_device_sn and inverters:
             selected_device_sn = inverters[0]['device_sn']
         
+        # Find selected inverter details from the augmented list
+        selected_inverter = next((inv for inv in inverters if inv.get('device_sn') == selected_device_sn), None)
+        plant_name = '--'
+        city = '--'
+        user_name = '--'
+        if selected_inverter:
+            user_name = selected_inverter.get('user_name', '--')
+            if selected_inverter.get('plant_details'):
+                plant_name = selected_inverter['plant_details'].get('plant_name', '--')
+                city = selected_inverter['plant_details'].get('city', '--')
+
         # If still no device_sn, render with error
         if not selected_device_sn:
             return render_template('disruption_events.html', 
                                   device_sn='',
                                   date=None,
                                   events=[],
-                                  inverters=inverters,
+                                  inverters=inverters, # Pass augmented list
+                                  user_name='--',
+                                  plant_name='--',
+                                  city='--',
                                   error='No device found to display disruptions.')
         
         # Call the watchdog method to get disruption events
@@ -793,7 +819,10 @@ def view_device_disruption_events():
                                   device_sn=selected_device_sn,
                                   date=date_str,
                                   events=[],
-                                  inverters=inverters,
+                                  inverters=inverters, # Pass augmented list
+                                  user_name=user_name,
+                                  plant_name=plant_name,
+                                  city=city,
                                   error=result[0].get('message', 'Unknown error'))
         
         # Extract the events from the result
@@ -804,14 +833,25 @@ def view_device_disruption_events():
                               device_sn=selected_device_sn,
                               date=date_str if date_str else result.get('date'),
                               events=events,
-                              inverters=inverters)
+                              inverters=inverters, # Pass augmented list
+                              user_name=user_name,
+                              plant_name=plant_name,
+                              city=city)
                                   
     except Exception as e:
+        # Use selected_device_sn if available in locals, otherwise fallback
+        current_device_sn = selected_device_sn if 'selected_device_sn' in locals() and selected_device_sn else (device_sn if 'device_sn' in locals() else '')
+        current_date_str = date_str if 'date_str' in locals() else None
+        # Try to pass augmented inverters if available, else empty list
+        current_inverters = inverters if 'inverters' in locals() else [] 
         return render_template('disruption_events.html', 
-                              device_sn=device_sn if 'device_sn' in locals() else '',
-                              date=date_str if 'date_str' in locals() else None,
+                              device_sn=current_device_sn,
+                              date=current_date_str,
                               events=[],
-                              inverters=[],
+                              inverters=current_inverters, # Pass potentially augmented list
+                              user_name='--',
+                              plant_name='--',
+                              city='--',
                               error=str(e))
 
 @app.route('/dashboard', methods=['GET'])

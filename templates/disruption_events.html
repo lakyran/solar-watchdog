@@ -108,7 +108,7 @@
                     <option value="">-- Select Inverter --</option>
                     {% for inverter in inverters %}
                         <option value="{{ inverter.device_sn }}" {% if (device_sn and inverter.device_sn == device_sn) or (not device_sn and loop.first) %}selected{% endif %}>
-                            {{ inverter.device_sn }} - {{ inverter.user_name|default(inverter.vendor|default('Unknown User')) }}
+                            {{ inverter.device_sn }} - {{ inverter.user_name|default('Unknown User') }} {% if inverter.plant_details %}({{ inverter.plant_details.plant_name|default('Unknown Plant') }}){% endif %}
                         </option>
                     {% endfor %}
                 </select>
@@ -137,24 +137,22 @@
         
         <div class="bg-white bg-opacity-90 shadow-md rounded-lg p-6 mb-8 border border-gray-200">
             <h2 class="text-xl font-semibold text-gray-700 mb-4">Device Information</h2>
-            <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div class="grid grid-cols-1 md:grid-cols-6 gap-4">
                 <div>
                     <p class="text-sm text-gray-500 mb-1">Device SN</p>
                     <p class="font-medium">{{ device_sn }}</p>
                 </div>
                 <div>
                     <p class="text-sm text-gray-500 mb-1">User Name</p>
-                    <p class="font-medium">
-                        {% if events %}
-                            {{ events[0].user_name|default(events[0].vendor|default('--')) }}
-                        {% else %}
-                            {% for inverter in inverters %}
-                                {% if inverter.device_sn == device_sn %}
-                                    {{ inverter.user_name|default(inverter.vendor|default('--')) }}
-                                {% endif %}
-                            {% endfor %}
-                        {% endif %}
-                    </p>
+                    <p class="font-medium">{{ user_name }}</p>
+                </div>
+                <div>
+                    <p class="text-sm text-gray-500 mb-1">Plant Name</p>
+                    <p class="font-medium">{{ plant_name }}</p>
+                </div>
+                <div>
+                    <p class="text-sm text-gray-500 mb-1">City</p>
+                    <p class="font-medium">{{ city }}</p>
                 </div>
                 <div>
                     {% if date %}
