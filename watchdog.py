@@ -1342,6 +1342,9 @@ class Watchdog:
                             date_obj = today - timedelta(days=i)
                             date_str = date_obj.strftime('%Y-%m-%d')
                             records = self.get_device_history_records(plant_id=plant_id, date_str=date_str)
+                            # Ensure records is a list, even if None was returned
+                            if records is None:
+                                records = []
                             # For each hour, average pac for that hour
                             hourly_eff = []
                             for hour in range(24):
