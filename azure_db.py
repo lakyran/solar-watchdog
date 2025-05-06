@@ -168,66 +168,92 @@ class AzureDB:
             if conn:
                 self.connection_pool.putconn(conn)
     
-    def get_device_records_by_date(self, device_sn, date):
+    def get_device_records_by_date(self, device_sn=None, plant_id=None, date=None):
         """
-        Retrieve all records for a specific device on a specific date
-        
+        Retrieve all records for a specific device or plant on a specific date.
         Args:
-            device_sn (str): Device serial number
+            device_sn (str, optional): Device serial number
+            plant_id (str, optional): Plant ID
             date (str): Date string in YYYY-MM-DD format
-            
         Returns:
-            list: List of records for the device on the specified date
+            list: List of records for the device/plant on the specified date
         """
         if not self.connection_pool:
             self.logger.error("Database connection pool not available")
             raise ValueError("Database connection pool not available")
-        
-        conn = None
-        cursor = None
-        
-        try:
-            # Get connection from pool
-            conn = self.connection_pool.getconn()
-            cursor = conn.cursor()
-            
+        if not date:
+            raise ValueError("date parameter is required")
+        # If both device_sn and plant_id are provided, use device_sn
+        if device_sn:
             self.logger.debug(f"Querying records for device {device_sn} on date {date}")
-            
-            # Query to get all records for the device on the specified date
-            cursor.execute(
-                """
-                SELECT TO_CHAR(datetime, 'YYYY-MM-DD HH24:MI:SS') as datetime, vendor, user_name, device_sn, device_oem, plant_id, 
-                       device_type, status, ppv, pac, eac_today, vpv1, vpv2, vpv3, 
-                       vac1, vac2, vac3, temperature, fault_type, total_records_on_day
-                FROM power_gen_history 
-                WHERE device_sn = %s AND DATE(datetime) = %s
-                ORDER BY datetime
-                """,
-                (device_sn, date)
-            )
-            
-            # Get column names
-            column_names = [desc[0] for desc in cursor.description]
-            
-            # Fetch all rows and convert to dictionaries
-            records = []
-            for row in cursor.fetchall():
-                record = dict(zip(column_names, row))
-                records.append(record)
-            
-            self.logger.info(f"Retrieved {len(records)} records for device {device_sn} on date {date}")
-            return records
-            
-        except Exception as e:
-            error_msg = f"Database error: {str(e)}"
-            self.logger.error(error_msg)
-            raise Exception(error_msg)
-        
-        finally:
-            if cursor:
-                cursor.close()
-            if conn:
-                self.connection_pool.putconn(conn)
+            conn = None
+            cursor = None
+            try:
+                conn = self.connection_pool.getconn()
+                cursor = conn.cursor()
+                cursor.execute(
+                    """
+                    SELECT TO_CHAR(datetime, 'YYYY-MM-DD HH24:MI:SS') as datetime, vendor, user_name, device_sn, device_oem, plant_id, 
+                           device_type, status, ppv, pac, eac_today, vpv1, vpv2, vpv3, 
+                           vac1, vac2, vac3, temperature, fault_type, total_records_on_day
+                    FROM power_gen_history 
+                    WHERE device_sn = %s AND DATE(datetime) = %s
+                    ORDER BY datetime
+                    """,
+                    (device_sn, date)
+                )
+                column_names = [desc[0] for desc in cursor.description]
+                records = []
+                for row in cursor.fetchall():
+                    record = dict(zip(column_names, row))
+                    records.append(record)
+                self.logger.info(f"Retrieved {len(records)} records for device {device_sn} on date {date}")
+                return records
+            except Exception as e:
+                error_msg = f"Database error: {str(e)}"
+                self.logger.error(error_msg)
+                raise Exception(error_msg)
+            finally:
+                if cursor:
+                    cursor.close()
+                if conn:
+                    self.connection_pool.putconn(conn)
+        elif plant_id:
+            self.logger.debug(f"Querying records for plant {plant_id} on date {date}")
+            conn = None
+            cursor = None
+            try:
+                conn = self.connection_pool.getconn()
+                cursor = conn.cursor()
+                cursor.execute(
+                    """
+                    SELECT TO_CHAR(datetime, 'YYYY-MM-DD HH24:MI:SS') as datetime, vendor, user_name, device_sn, device_oem, plant_id, 
+                           device_type, status, ppv, pac, eac_today, vpv1, vpv2, vpv3, 
+                           vac1, vac2, vac3, temperature, fault_type, total_records_on_day
+                    FROM power_gen_history 
+                    WHERE plant_id = %s AND DATE(datetime) = %s
+                    ORDER BY datetime
+                    """,
+                    (plant_id, date)
+                )
+                column_names = [desc[0] for desc in cursor.description]
+                records = []
+                for row in cursor.fetchall():
+                    record = dict(zip(column_names, row))
+                    records.append(record)
+                self.logger.info(f"Retrieved {len(records)} records for plant {plant_id} on date {date}")
+                return records
+            except Exception as e:
+                error_msg = f"Database error: {str(e)}"
+                self.logger.error(error_msg)
+                raise Exception(error_msg)
+            finally:
+                if cursor:
+                    cursor.close()
+                if conn:
+                    self.connection_pool.putconn(conn)
+        else:
+            raise ValueError("Either device_sn or plant_id must be provided")
     
     def insert_disruption_events(self, disruption_events, device_metadata):
         """

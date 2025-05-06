@@ -47,7 +47,7 @@ def get_current_time_ist():
 
 @app.route('/', methods=['GET'])
 def hello():
-    return 'Hello from Azure App Service!'
+    return render_template('welcome.html')
 
 @app.route('/device/history/test', methods=['GET'])
 def test_growatt_device_history():
@@ -123,20 +123,23 @@ def ingest_device_generation_history():
 @app.route('/device/history', methods=['GET'])
 def get_device_history():
     try:
-        # Get device_sn and date from request data
+        # Get device_sn, plant_id, and date from request data
         device_sn = request.args.get('device_sn')
+        plant_id = request.args.get('plant_id')
         date = request.args.get('date')
         
-        # Validate that both parameters are provided
-        if not device_sn or not date:
-            return jsonify({'error': 'Both device_sn and date parameters are required'}), 400
-            
-        records = watchdog.db_client.get_device_records_by_date(device_sn, date)
+        # Validate that at least one of device_sn or plant_id and date are provided
+        if (not device_sn and not plant_id) or not date:
+            return jsonify({'error': 'device_sn or plant_id and date parameters are required'}), 400
+        
+        # If both device_sn and plant_id are provided, use device_sn
+        records = watchdog.get_device_history_records(device_sn=device_sn, plant_id=plant_id, date_str=date)
         return jsonify({
             'device_sn': device_sn,
+            'plant_id': plant_id,
             'date': date,
-            'record_count': len(records),
-            'records': records
+            'record_count': len(records) if records else 0,
+            'records': records if records else []
         })
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -254,37 +257,42 @@ def view_device_disruption_events():
             logger.error(f"Error fetching inverters list: {str(e)}")
             inverters = []
         
-        # Validate that device_sn is provided
-        if not device_sn:
+        # If device_sn is not provided, use the first inverter as default
+        selected_device_sn = device_sn
+        if not selected_device_sn and inverters:
+            selected_device_sn = inverters[0]['device_sn']
+        
+        # If still no device_sn, render with error
+        if not selected_device_sn:
             return render_template('disruption_events.html', 
                                   device_sn='',
                                   date=None,
                                   events=[],
                                   inverters=inverters,
-                                  error='device_sn parameter is required')
-            
+                                  error='No device found to display disruptions.')
+        
         # Call the watchdog method to get disruption events
-        result = watchdog.get_device_disruption_events_route(device_sn, date_str)
+        result = watchdog.get_device_disruption_events_route(selected_device_sn, date_str)
         
         # If the result is a tuple with status code, handle the error
         if isinstance(result, tuple):
             return render_template('disruption_events.html', 
-                                  device_sn=device_sn,
+                                  device_sn=selected_device_sn,
                                   date=date_str,
                                   events=[],
                                   inverters=inverters,
                                   error=result[0].get('message', 'Unknown error'))
-            
+        
         # Extract the events from the result
         events = result.get('disruption_events', [])
         
         # Render the template with the data
         return render_template('disruption_events.html', 
-                              device_sn=device_sn,
+                              device_sn=selected_device_sn,
                               date=date_str if date_str else result.get('date'),
                               events=events,
                               inverters=inverters)
-                              
+                                  
     except Exception as e:
         return render_template('disruption_events.html', 
                               device_sn=device_sn if 'device_sn' in locals() else '',
@@ -832,6 +840,42 @@ def get_user_dashboard():
         
     except Exception as e:
         return jsonify({'status': 'error', 'message': str(e)}), 500
+
+@app.route('/devices/efficiency/view', methods=['GET'])
+def view_efficiency_snapshot():
+    try:
+        # Get filter parameters from request
+        min_eff = int(request.args.get('min_eff', 0))
+        max_eff = int(request.args.get('max_eff', 100))
+        if min_eff < 0: min_eff = 0
+        if max_eff > 100: max_eff = 100
+        if min_eff > max_eff: min_eff, max_eff = max_eff, min_eff
+
+        # Optional: plant_name for 7-day efficiency plot
+        plant_name_selected = request.args.get('plant_name')
+
+        # Delegate all processing to watchdog
+        data = watchdog.get_efficiency_snapshot_data(min_eff=min_eff, max_eff=max_eff, plant_name_selected=plant_name_selected)
+        return render_template('efficiency_snapshot.html', **data)
+    except Exception as e:
+        logger.error(f"Error rendering efficiency snapshot: {str(e)}")
+        # Return empty data for template
+        return render_template(
+            'efficiency_snapshot.html',
+            efficiency_bins=[],
+            x_labels=[],
+            min_eff=0,
+            max_eff=100,
+            filtered_plants=[],
+            all_plants=[],
+            efficiency_percentages=[],
+            efficiency_legend=[],
+            plant_name_selected=None,
+            plant_efficiency_7d_hourly=[],
+            plant_efficiency_7d_labels=[],
+            plant_hour_labels=[],
+            error=str(e)
+        )
 
 if __name__ == '__main__':
     app.run()

@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Unisolartech Watchdog - Efficiency Snapshot</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        .wrap-content {
+            white-space: normal;
+            word-wrap: break-word;
+            max-width: 300px;
+            overflow-wrap: break-word;
+        }
+        .table-fixed {
+            table-layout: fixed;
+        }
+    </style>
+</head>
+<body class="bg-gray-50 text-gray-800">
+    <div class="container mx-auto px-4 py-8 max-w-full">
+        <a href="/" class="inline-flex items-center text-indigo-600 hover:text-indigo-800 mb-4 font-semibold">
+            <svg class="h-5 w-5 mr-1" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><path d="M15 19l-7-7 7-7"/></svg>
+            Back to Home
+        </a>
+        <h1 class="text-3xl font-bold text-gray-700 mb-8 border-b pb-2">Unisolartech Watchdog - Efficiency Snapshot</h1>
+
+        {% if error %}
+            <div class="bg-red-100 border-l-4 border-red-500 text-red-700 p-4 mb-6 rounded-md shadow">
+                <div class="flex">
+                    <div class="flex-shrink-0">
+                        <svg class="h-5 w-5 text-red-500" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd" />
+                        </svg>
+                    </div>
+                    <div class="ml-3">
+                        <p class="text-sm font-medium">{{ error }}</p>
+                    </div>
+                </div>
+            </div>
+        {% endif %}
+
+        <div class="bg-white shadow-md rounded-lg p-6 mb-8 border border-gray-200">
+            <h2 class="text-xl font-semibold text-gray-700 mb-4">System Efficiency Distribution</h2>
+            <canvas id="efficiencyBarChart" height="80"></canvas>
+            <!-- Legend for efficiency bins -->
+            <div class="mt-6 flex flex-wrap gap-4">
+                {% for legend in efficiency_legend %}
+                    <div class="flex items-center space-x-2">
+                        <span class="inline-block w-4 h-4 rounded" style="background-color: rgba(37,99,235,0.7);"></span>
+                        <span class="font-bold text-xs">{{ legend.label }}</span>
+                    </div>
+                {% endfor %}
+            </div>
+        </div>
+
+        <div class="bg-white shadow-md rounded-lg p-6 mb-8 border border-gray-200">
+            <h2 class="text-xl font-semibold text-gray-700 mb-4">Filter by Efficiency Range</h2>
+            <form id="efficiency-filter-form" method="get" action="">
+                <div class="flex items-center space-x-4">
+                    <label for="min_eff" class="block text-sm font-medium text-gray-700">Min Efficiency</label>
+                    <input type="range" id="min_eff" name="min_eff" min="0" max="100" step="10" value="{{ min_eff }}" class="w-32">
+                    <span id="min-eff-label" class="font-semibold">{{ min_eff }}</span>%
+                    <label for="max_eff" class="block text-sm font-medium text-gray-700 ml-8">Max Efficiency</label>
+                    <input type="range" id="max_eff" name="max_eff" min="0" max="100" step="10" value="{{ max_eff }}" class="w-32">
+                    <span id="max-eff-label" class="font-semibold">{{ max_eff }}</span>%
+                    <button type="submit" class="ml-8 px-4 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700">Apply Filter</button>
+                </div>
+            </form>
+        </div>
+
+        <div class="bg-white shadow-md rounded-lg p-6 border border-gray-200">
+            <h2 class="text-xl font-semibold text-gray-700 mb-4">Plants in Selected Efficiency Range</h2>
+            <div class="overflow-x-auto relative shadow-md rounded-lg border border-gray-200">
+                <table class="w-full text-sm text-left table-fixed">
+                    <thead class="text-xs text-gray-700 uppercase bg-gray-100">
+                        <tr>
+                            <th class="px-4 py-3">Plant Name</th>
+                            <th class="px-4 py-3">User Name</th>
+                            <th class="px-4 py-3">City</th>
+                            <th class="px-4 py-3">Peak Power (kW)</th>
+                            <th class="px-4 py-3">Current Power (kW)</th>
+                            <th class="px-4 py-3">Efficiency (%)</th>
+                            <th class="px-4 py-3">Today Energy (kWh)</th>
+                            <th class="px-4 py-3">Last Updated</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for entry in filtered_plants %}
+                            <tr class="border-b hover:bg-gray-50">
+                                <td class="px-4 py-3 wrap-content">{{ entry.plant.plant_name }}</td>
+                                <td class="px-4 py-3">{{ entry.plant.user_name }}</td>
+                                <td class="px-4 py-3">{{ entry.plant.city|default('--') }}</td>
+                                <td class="px-4 py-3 text-right">{{ entry.summary.peak_power }}</td>
+                                <td class="px-4 py-3 text-right">{{ entry.summary.current_power }}</td>
+                                <td class="px-4 py-3 text-right font-semibold">{{ entry.efficiency }}</td>
+                                <td class="px-4 py-3 text-right">{{ entry.summary.today_energy }}</td>
+                                <td class="px-4 py-3">{{ entry.summary.last_updated_at|default('--') }}</td>
+                            </tr>
+                        {% else %}
+                            <tr>
+                                <td colspan="8" class="text-center text-gray-500 italic py-6">No plants found in this efficiency range.</td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- 7-day efficiency section -->
+        <div class="bg-white shadow-md rounded-lg p-6 border border-gray-200 mt-8">
+            <h2 class="text-xl font-semibold text-gray-700 mb-4">Plant Hourly Efficiency Over Past 7 Days</h2>
+            <form method="get" class="mb-4 flex flex-wrap items-center gap-4">
+                <label for="plant_name" class="block text-sm font-medium text-gray-700">Select Plant</label>
+                <select id="plant_name" name="plant_name" class="block w-64 px-4 py-2 pr-8 leading-tight bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+                    <option value="">-- Select Plant --</option>
+                    {% for entry in all_plants %}
+                        <option value="{{ entry.plant.plant_name }}" {% if plant_name_selected == entry.plant.plant_name %}selected{% endif %}>{{ entry.plant.plant_name }}</option>
+                    {% endfor %}
+                </select>
+                <!-- Preserve other filters -->
+                <input type="hidden" name="min_eff" value="{{ min_eff }}">
+                <input type="hidden" name="max_eff" value="{{ max_eff }}">
+                <button type="submit" class="px-4 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700">Show</button>
+            </form>
+            {% if plant_name_selected and plant_efficiency_7d_hourly and plant_efficiency_7d_labels %}
+                <div class="w-full md:w-2/3 mx-auto">
+                    <canvas id="plantEfficiency7dChart" height="80"></canvas>
+                </div>
+            {% elif plant_name_selected %}
+                <div class="text-gray-500 italic">No data found for the selected plant in the past 7 days.</div>
+            {% endif %}
+        </div>
+    </div>
+    <!-- Chart.js bar plot -->
+    <script type="application/json" id="x-labels-json">{{ x_labels|tojson|safe }}</script>
+    <script type="application/json" id="efficiency-bins-json">{{ efficiency_bins|tojson|safe }}</script>
+    <script>
+    const ctx = document.getElementById('efficiencyBarChart').getContext('2d');
+    const xLabels = JSON.parse(document.getElementById('x-labels-json').textContent);
+    const efficiencyBins = JSON.parse(document.getElementById('efficiency-bins-json').textContent);
+    const barChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: xLabels,
+            datasets: [{
+                label: 'Number of Plants',
+                data: efficiencyBins,
+                backgroundColor: 'rgba(37, 99, 235, 0.7)',
+                borderColor: 'rgba(37, 99, 235, 1)',
+                borderWidth: 1
+            }]
+        },
+        options: {
+            responsive: true,
+            plugins: {
+                legend: { display: false },
+                title: {
+                    display: false
+                }
+            },
+            scales: {
+                x: {
+                    title: {
+                        display: true,
+                        text: 'Efficiency (%)'
+                    }
+                },
+                y: {
+                    beginAtZero: true,
+                    title: {
+                        display: true,
+                        text: 'Number of Plants'
+                    },
+                    ticks: {
+                        stepSize: 1
+                    }
+                }
+            }
+        }
+    });
+    </script>
+    {% if plant_name_selected and plant_efficiency_7d_hourly and plant_efficiency_7d_labels %}
+    <script type="application/json" id="plant-hour-labels-json">{{ plant_hour_labels|tojson|safe }}</script>
+    <script type="application/json" id="plant-efficiency-7d-labels-json">{{ plant_efficiency_7d_labels|tojson|safe }}</script>
+    <script type="application/json" id="plant-efficiency-7d-hourly-json">{{ plant_efficiency_7d_hourly|tojson|safe }}</script>
+    <script>
+    // 7-day hourly efficiency multi-line chart
+    const ctx7d = document.getElementById('plantEfficiency7dChart').getContext('2d');
+    const hourLabels = JSON.parse(document.getElementById('plant-hour-labels-json').textContent);
+    const dayLabels = JSON.parse(document.getElementById('plant-efficiency-7d-labels-json').textContent);
+    const efficiencyData = JSON.parse(document.getElementById('plant-efficiency-7d-hourly-json').textContent);
+    // Generate colors for each day
+    const colors = [
+        'rgba(37,99,235,1)',
+        'rgba(16,185,129,1)',
+        'rgba(234,179,8,1)',
+        'rgba(239,68,68,1)',
+        'rgba(168,85,247,1)',
+        'rgba(251,191,36,1)',
+        'rgba(59,130,246,1)'
+    ];
+    const datasets = dayLabels.map((date, idx) => ({
+        label: date,
+        data: efficiencyData[idx],
+        fill: false,
+        borderColor: colors[idx % colors.length],
+        backgroundColor: colors[idx % colors.length],
+        tension: 0.2,
+        pointRadius: 3,
+        pointHoverRadius: 5
+    }));
+    const plant7dChart = new Chart(ctx7d, {
+        type: 'line',
+        data: {
+            labels: hourLabels,
+            datasets: datasets
+        },
+        options: {
+            responsive: true,
+            plugins: {
+                legend: { display: true },
+                title: {
+                    display: true,
+                    text: 'Hourly Efficiency % for {{ plant_name_selected }} (Past 7 Days)'
+                }
+            },
+            scales: {
+                x: {
+                    title: {
+                        display: true,
+                        text: 'Hour of Day'
+                    }
+                },
+                y: {
+                    beginAtZero: true,
+                    title: {
+                        display: true,
+                        text: 'Efficiency (%)'
+                    },
+                    max: 100
+                }
+            }
+        }
+    });
+    </script>
+    {% endif %}
+    <script>
+        // Slider label update
+        const minEffInput = document.getElementById('min_eff');
+        const maxEffInput = document.getElementById('max_eff');
+        const minEffLabel = document.getElementById('min-eff-label');
+        const maxEffLabel = document.getElementById('max-eff-label');
+        minEffInput.addEventListener('input', function() {
+            minEffLabel.textContent = minEffInput.value;
+            if (parseInt(minEffInput.value) > parseInt(maxEffInput.value)) {
+                maxEffInput.value = minEffInput.value;
+                maxEffLabel.textContent = minEffInput.value;
+            }
+        });
+        maxEffInput.addEventListener('input', function() {
+            maxEffLabel.textContent = maxEffInput.value;
+            if (parseInt(maxEffInput.value) < parseInt(minEffInput.value)) {
+                minEffInput.value = maxEffInput.value;
+                minEffLabel.textContent = maxEffInput.value;
+            }
+        });
+    </script>
+</body>
+</html> 

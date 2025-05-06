@@ -369,6 +369,37 @@ class Watchdog:
             self.logger.error(error_msg)
             return {'error': error_msg}, 500
 
+    def get_device_history_records(self, device_sn=None, plant_id=None, date_str=None):
+        """
+        Get history records for a device or plant and date from the database.
+        Args:
+            device_sn (str, optional): Device serial number
+            plant_id (str, optional): Plant ID
+            date_str (str): Date in YYYY-MM-DD format
+        Returns:
+            list: List of history records (dicts) or None if error
+        """
+        try:
+            if not date_str:
+                self.logger.error("date_str parameter is required")
+                return None
+            # If both device_sn and plant_id are provided, use device_sn
+            if device_sn:
+                self.logger.info(f"Fetching history records for device {device_sn} on {date_str}")
+                records = self.db_client.get_device_records_by_date(device_sn=device_sn, date=date_str)
+                self.logger.info(f"Fetched {len(records)} history records for device {device_sn} on {date_str}")
+            elif plant_id:
+                self.logger.info(f"Fetching history records for plant {plant_id} on {date_str}")
+                records = self.db_client.get_device_records_by_date(plant_id=plant_id, date=date_str)
+                self.logger.info(f"Fetched {len(records)} history records for plant {plant_id} on {date_str}")
+            else:
+                self.logger.error("Either device_sn or plant_id must be provided")
+                return None
+            return records
+        except Exception as e:
+            self.logger.error(f"Error fetching history records for device_sn={device_sn}, plant_id={plant_id} on {date_str}: {str(e)}")
+            return None
+
     def get_device_disruption_events_route(self, device_sn, date_str=None):
         """
         Route handler for fetching disruption events for a specific device
@@ -1227,4 +1258,136 @@ class Watchdog:
                 'status': 'error',
                 'device_sn': device_sn,
                 'message': error_msg
+            }
+
+    def get_efficiency_snapshot_data(self, min_eff=0, max_eff=100, plant_name_selected=None):
+        """
+        Compute all data needed for the efficiency snapshot view, including:
+        - Efficiency bins and legend
+        - Filtered plants and all plants with efficiency
+        - 7-day hourly efficiency for a selected plant
+        Returns a dict suitable for passing to the template.
+        """
+        try:
+            plant_efficiency_7d_hourly = []  # List of 7 lists, each with 24 hourly values
+            plant_efficiency_7d_labels = []  # List of 7 date strings
+            plant_hour_labels = [f"{str(h).zfill(2)}:00" for h in range(24)]
+
+            # Get all plants
+            plants = self.db_client.get_plants_list()
+            efficiency_bins = [0]*10  # 0-10, 10-20, ..., 90-100
+            filtered_plants = []
+            plant_efficiency_data = []
+            total_plants = 0
+
+            for plant in plants:
+                plant_id = plant.get('plant_id')
+                user_name = plant.get('user_name')
+                summary = self.db_client.get_plant_energy_summary(plant_id)
+                if not summary:
+                    continue
+                peak_power = summary.get('peak_power')
+                # Use watchdog.get_current_power_for_user for current power
+                current_power = self.get_current_power_for_user(user_name, plant_id)
+                summary['current_power'] = current_power  # override for table
+                if not peak_power or peak_power == 0:
+                    efficiency = 0
+                else:
+                    efficiency = round((float(current_power) / float(peak_power)) * 100, 2)
+                # Bin the efficiency
+                bin_index = min(int(efficiency // 10), 9)
+                efficiency_bins[bin_index] += 1
+                total_plants += 1
+                # Store for table if in filter range
+                if min_eff <= efficiency < max_eff or (max_eff == 100 and efficiency == 100):
+                    filtered_plants.append({
+                        'plant': plant,
+                        'summary': summary,
+                        'efficiency': efficiency
+                    })
+                plant_efficiency_data.append({
+                    'plant': plant,
+                    'summary': summary,
+                    'efficiency': efficiency
+                })
+
+            # Prepare x-axis labels
+            x_labels = [f"{i*10}-{(i+1)*10}" for i in range(10)]
+
+            # Calculate legend percentages
+            if total_plants > 0:
+                efficiency_percentages = [round((count / total_plants) * 100) for count in efficiency_bins]
+            else:
+                efficiency_percentages = [0]*10
+            # Precompute legend as a list of dicts
+            efficiency_legend = [
+                {'label': f"{label}: {count} ({percent}%)"}
+                for label, count, percent in zip(x_labels, efficiency_bins, efficiency_percentages)
+                if count > 0
+            ]
+
+            # 7-day hourly efficiency for a selected plant
+            if plant_name_selected:
+                # Find the plant_id and user_name for the given plant_name
+                selected_plant = next((p for p in plants if p.get('plant_name') == plant_name_selected), None)
+                if selected_plant:
+                    plant_id = selected_plant.get('plant_id')
+                    user_name = selected_plant.get('user_name')
+                    summary = self.db_client.get_plant_energy_summary(plant_id)
+                    peak_power = summary.get('peak_power') if summary else None
+                    if peak_power and peak_power != 0:
+                        from datetime import datetime, timedelta
+                        today = self.get_current_time_ist().date()
+                        for i in range(6, -1, -1):  # 6 days ago to today
+                            date_obj = today - timedelta(days=i)
+                            date_str = date_obj.strftime('%Y-%m-%d')
+                            records = self.get_device_history_records(plant_id=plant_id, date_str=date_str)
+                            # For each hour, average pac for that hour
+                            hourly_eff = []
+                            for hour in range(24):
+                                hour_str = str(hour).zfill(2)
+                                hour_records = [r for r in records if r.get('datetime', '').startswith(f"{date_str} {hour_str}")]
+                                pac_values = [r.get('pac', 0) for r in hour_records if r.get('pac') is not None]
+                                if pac_values:
+                                    avg_pac = sum(pac_values) / len(pac_values)
+                                    # peak_power is in kW, pac is in W, so multiply peak_power by 1000
+                                    if peak_power:
+                                        eff = round((float(avg_pac) / (float(peak_power) * 1000)) * 100, 2)
+                                    else:
+                                        eff = 0
+                                else:
+                                    eff = 0
+                                hourly_eff.append(eff)
+                            plant_efficiency_7d_hourly.append(hourly_eff)
+                            plant_efficiency_7d_labels.append(date_str)
+            return {
+                'efficiency_bins': efficiency_bins,
+                'x_labels': x_labels,
+                'min_eff': min_eff,
+                'max_eff': max_eff,
+                'filtered_plants': filtered_plants,
+                'all_plants': plant_efficiency_data,
+                'efficiency_percentages': efficiency_percentages,
+                'efficiency_legend': efficiency_legend,
+                'plant_name_selected': plant_name_selected,
+                'plant_efficiency_7d_hourly': plant_efficiency_7d_hourly,
+                'plant_efficiency_7d_labels': plant_efficiency_7d_labels,
+                'plant_hour_labels': plant_hour_labels
+            }
+        except Exception as e:
+            self.logger.error(f"Error computing efficiency snapshot data: {str(e)}")
+            # Return empty data for template
+            return {
+                'efficiency_bins': [],
+                'x_labels': [],
+                'min_eff': min_eff,
+                'max_eff': max_eff,
+                'filtered_plants': [],
+                'all_plants': [],
+                'efficiency_percentages': [],
+                'efficiency_legend': [],
+                'plant_name_selected': None,
+                'plant_efficiency_7d_hourly': [],
+                'plant_efficiency_7d_labels': [],
+                'plant_hour_labels': []
             }
