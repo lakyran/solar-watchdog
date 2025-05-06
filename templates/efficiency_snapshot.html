@@ -20,8 +20,8 @@
 </head>
 <body class="bg-gradient-to-br from-yellow-100 via-blue-100 to-blue-300 min-h-screen text-gray-800 relative">
     <!-- Decorative sun icon in the top left -->
-    <div class="absolute left-0 top-0 m-6 z-0">
-        <svg width="60" height="60" viewBox="0 0 60 60" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <div class="absolute left-0 top-0 m-2 md:m-6 z-0">
+        <svg width="40" height="40" md:width="60" md:height="60" viewBox="0 0 60 60" fill="none" xmlns="http://www.w3.org/2000/svg">
             <circle cx="30" cy="30" r="18" fill="#FDE68A"/>
             <g stroke="#F59E42" stroke-width="2">
                 <line x1="30" y1="4" x2="30" y2="16"/>
@@ -35,13 +35,13 @@
             </g>
         </svg>
     </div>
-    <div class="container mx-auto px-4 py-8 max-w-full relative z-10">
+    <div class="container mx-auto px-2 md:px-4 py-4 md:py-8 max-w-full relative z-10">
         <a href="/" class="inline-flex items-center text-indigo-600 hover:text-indigo-800 mb-4 font-semibold">
             <svg class="h-5 w-5 mr-1" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><path d="M15 19l-7-7 7-7"/></svg>
             Back to Home
         </a>
-        <div class="bg-white bg-opacity-90 shadow-md rounded-lg p-6 mb-8 border border-gray-200">
-            <h1 class="text-3xl font-bold text-gray-700 mb-8 border-b pb-2">Unisolartech Watchdog - Efficiency Snapshot</h1>
+        <div class="bg-white bg-opacity-90 shadow-md rounded-lg p-4 md:p-6 mb-6 md:mb-8 border border-gray-200">
+            <h1 class="text-2xl md:text-3xl font-bold text-gray-700 mb-6 md:mb-8 border-b pb-2">Unisolartech Watchdog - Efficiency Snapshot</h1>
 
         {% if error %}
             <div class="bg-red-100 border-l-4 border-red-500 text-red-700 p-4 mb-6 rounded-md shadow">
@@ -58,62 +58,64 @@
             </div>
         {% endif %}
 
-        <div class="bg-white shadow-md rounded-lg p-6 mb-8 border border-gray-200">
-            <h2 class="text-xl font-semibold text-gray-700 mb-4">System Efficiency Distribution</h2>
-            <canvas id="efficiencyBarChart" height="80"></canvas>
+        <div class="bg-white bg-opacity-90 shadow-md rounded-lg p-4 md:p-6 mb-6 md:mb-8 border border-gray-200">
+            <h2 class="text-lg md:text-xl font-semibold text-gray-700 mb-4">System Efficiency Distribution</h2>
+            <canvas id="efficiencyBarChart" height="100"></canvas>
             <!-- Legend for efficiency bins -->
-            <div class="mt-6 flex flex-wrap gap-4">
+            <div class="mt-4 md:mt-6 flex flex-wrap gap-2 md:gap-4">
                 {% for legend in efficiency_legend %}
-                    <div class="flex items-center space-x-2">
-                        <span class="inline-block w-4 h-4 rounded" style="background-color: rgba(37,99,235,0.7);"></span>
+                    <div class="flex items-center space-x-1 md:space-x-2">
+                        <span class="inline-block w-3 h-3 md:w-4 md:h-4 rounded" style="background-color: rgba(37,99,235,0.7);"></span>
                         <span class="font-bold text-xs">{{ legend.label }}</span>
                     </div>
                 {% endfor %}
             </div>
         </div>
 
-        <div class="bg-white shadow-md rounded-lg p-6 mb-8 border border-gray-200">
-            <h2 class="text-xl font-semibold text-gray-700 mb-4">Filter by Efficiency Range</h2>
+        <div class="bg-white bg-opacity-90 shadow-md rounded-lg p-4 md:p-6 mb-6 md:mb-8 border border-gray-200">
+            <h2 class="text-lg md:text-xl font-semibold text-gray-700 mb-4">Filter by Efficiency Range</h2>
             <form id="efficiency-filter-form" method="get" action="">
-                <div class="flex items-center space-x-4">
-                    <label for="min_eff" class="block text-sm font-medium text-gray-700">Min Efficiency</label>
-                    <input type="range" id="min_eff" name="min_eff" min="0" max="100" step="10" value="{{ min_eff }}" class="w-32">
-                    <span id="min-eff-label" class="font-semibold">{{ min_eff }}</span>%
-                    <label for="max_eff" class="block text-sm font-medium text-gray-700 ml-8">Max Efficiency</label>
-                    <input type="range" id="max_eff" name="max_eff" min="0" max="100" step="10" value="{{ max_eff }}" class="w-32">
-                    <span id="max-eff-label" class="font-semibold">{{ max_eff }}</span>%
-                    <button type="submit" class="ml-8 px-4 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700">Apply Filter</button>
+                <div class="flex flex-col md:flex-row md:items-center space-y-4 md:space-y-0 md:space-x-4">
+                    <div class="flex flex-col w-full md:w-auto">
+                        <label for="min_eff" class="block text-sm font-medium text-gray-700 mb-1">Min Efficiency: <span id="min-eff-label" class="font-semibold">{{ min_eff }}</span>%</label>
+                        <input type="range" id="min_eff" name="min_eff" min="0" max="100" step="10" value="{{ min_eff }}" class="w-full md:w-32">
+                    </div>
+                    <div class="flex flex-col w-full md:w-auto">
+                        <label for="max_eff" class="block text-sm font-medium text-gray-700 mb-1">Max Efficiency: <span id="max-eff-label" class="font-semibold">{{ max_eff }}</span>%</label>
+                        <input type="range" id="max_eff" name="max_eff" min="0" max="100" step="10" value="{{ max_eff }}" class="w-full md:w-32">
+                    </div>
+                    <button type="submit" class="mt-4 md:mt-0 md:ml-8 px-4 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700">Apply Filter</button>
                 </div>
             </form>
         </div>
 
-        <div class="bg-white shadow-md rounded-lg p-6 border border-gray-200">
-            <h2 class="text-xl font-semibold text-gray-700 mb-4">Plants in Selected Efficiency Range</h2>
+        <div class="bg-white bg-opacity-90 shadow-md rounded-lg p-4 md:p-6 border border-gray-200">
+            <h2 class="text-lg md:text-xl font-semibold text-gray-700 mb-4">Plants in Selected Efficiency Range</h2>
             <div class="overflow-x-auto relative shadow-md rounded-lg border border-gray-200">
-                <table class="w-full text-sm text-left table-fixed">
+                <table class="w-full text-sm text-left">
                     <thead class="text-xs text-gray-700 uppercase bg-gray-100">
                         <tr>
-                            <th class="px-4 py-3">Plant Name</th>
-                            <th class="px-4 py-3">User Name</th>
-                            <th class="px-4 py-3">City</th>
-                            <th class="px-4 py-3">Peak Power (kW)</th>
-                            <th class="px-4 py-3">Current Power (kW)</th>
-                            <th class="px-4 py-3">Efficiency (%)</th>
-                            <th class="px-4 py-3">Today Energy (kWh)</th>
-                            <th class="px-4 py-3">Last Updated</th>
+                            <th class="px-3 py-2">Plant</th>
+                            <th class="px-3 py-2">User</th>
+                            <th class="px-3 py-2 hidden md:table-cell">City</th>
+                            <th class="px-3 py-2 text-right">Peak (kW)</th>
+                            <th class="px-3 py-2 text-right">Current (kW)</th>
+                            <th class="px-3 py-2 text-right">Efficiency</th>
+                            <th class="px-3 py-2 text-right hidden md:table-cell">Today (kWh)</th>
+                            <th class="px-3 py-2 hidden md:table-cell">Updated</th>
                         </tr>
                     </thead>
                     <tbody>
                         {% for entry in filtered_plants %}
                             <tr class="border-b hover:bg-gray-50">
-                                <td class="px-4 py-3 wrap-content">{{ entry.plant.plant_name }}</td>
-                                <td class="px-4 py-3">{{ entry.plant.user_name }}</td>
-                                <td class="px-4 py-3">{{ entry.plant.city|default('--') }}</td>
-                                <td class="px-4 py-3 text-right">{{ entry.summary.peak_power }}</td>
-                                <td class="px-4 py-3 text-right">{{ entry.summary.current_power }}</td>
-                                <td class="px-4 py-3 text-right font-semibold">{{ entry.efficiency }}</td>
-                                <td class="px-4 py-3 text-right">{{ entry.summary.today_energy }}</td>
-                                <td class="px-4 py-3">{{ entry.summary.last_updated_at|default('--') }}</td>
+                                <td class="px-3 py-2 wrap-content">{{ entry.plant.plant_name }}</td>
+                                <td class="px-3 py-2">{{ entry.plant.user_name }}</td>
+                                <td class="px-3 py-2 hidden md:table-cell">{{ entry.plant.city|default('--') }}</td>
+                                <td class="px-3 py-2 text-right">{{ entry.summary.peak_power }}</td>
+                                <td class="px-3 py-2 text-right">{{ entry.summary.current_power }}</td>
+                                <td class="px-3 py-2 text-right font-semibold">{{ entry.efficiency }}%</td>
+                                <td class="px-3 py-2 text-right hidden md:table-cell">{{ entry.summary.today_energy }}</td>
+                                <td class="px-3 py-2 hidden md:table-cell">{{ entry.summary.last_updated_at|default('--') }}</td>
                             </tr>
                         {% else %}
                             <tr>
@@ -126,11 +128,11 @@
         </div>
 
         <!-- 7-day efficiency section -->
-        <div class="bg-white shadow-md rounded-lg p-6 border border-gray-200 mt-8">
-            <h2 class="text-xl font-semibold text-gray-700 mb-4">Plant Hourly Efficiency Over Past 7 Days</h2>
-            <form method="get" class="mb-4 flex flex-wrap items-center gap-4">
+        <div class="bg-white bg-opacity-90 shadow-md rounded-lg p-4 md:p-6 border border-gray-200 mt-6 md:mt-8">
+            <h2 class="text-lg md:text-xl font-semibold text-gray-700 mb-4">Plant Hourly Efficiency Over Past 7 Days</h2>
+            <form method="get" class="mb-4 flex flex-col md:flex-row md:items-center gap-4">
                 <label for="plant_name" class="block text-sm font-medium text-gray-700">Select Plant</label>
-                <select id="plant_name" name="plant_name" class="block w-64 px-4 py-2 pr-8 leading-tight bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+                <select id="plant_name" name="plant_name" class="block w-full md:w-64 px-4 py-2 pr-8 leading-tight bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
                     <option value="">-- Select Plant --</option>
                     {% for entry in all_plants %}
                         <option value="{{ entry.plant.plant_name }}" {% if plant_name_selected == entry.plant.plant_name %}selected{% endif %}>{{ entry.plant.plant_name }}</option>
@@ -142,8 +144,8 @@
                 <button type="submit" class="px-4 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700">Show</button>
             </form>
             {% if plant_name_selected and plant_efficiency_7d_hourly and plant_efficiency_7d_labels %}
-                <div class="w-full md:w-2/3 mx-auto">
-                    <canvas id="plantEfficiency7dChart" height="80"></canvas>
+                <div class="w-full mx-auto">
+                    <canvas id="plantEfficiency7dChart" height="120"></canvas>
                 </div>
             {% elif plant_name_selected %}
                 <div class="text-gray-500 italic">No data found for the selected plant in the past 7 days.</div>
