@@ -88,7 +88,7 @@ class Watchdog:
                     self.logger.info(f"No last record date found for device {device_sn}, using today's date: {date_str}")
 
             # Get records from db for device and date
-            records = self.db_client.get_device_records_by_date(device_sn, date_str)
+            records = self.db_client.get_device_records_by_date(device_sn=device_sn, date=date_str)
             records_count = len(records)
             self.logger.info(f"Records count for device {device_sn} on {date_str}: {len(records)}")
 
@@ -100,7 +100,7 @@ class Watchdog:
             # If records exist and overwrite is True, then first delete the records for the device and date
             if records_count > 0 and overwrite:
                 self.logger.info(f"Deleting records for device {device_sn} on {date_str}")
-                db_result = self.db_client.delete_device_records_by_date(device_sn, date_str)
+                db_result = self.db_client.delete_device_records_by_date(device_sn=device_sn, date=date_str)
                 if db_result['status'] == 'success':
                     self.logger.info(f"Deleted {db_result['deleted_records']} records for device {device_sn} on {date_str}")
                 else:
@@ -203,7 +203,7 @@ class Watchdog:
             self.logger.info(f"Analyzing generation data for device {device_sn} on {date_str}")
             
             # Fetch device records from database
-            generation_history = self.db_client.get_device_records_by_date(device_sn, date_str)
+            generation_history = self.db_client.get_device_records_by_date(device_sn=device_sn, date=date_str)
             self.logger.info(f"Number of records found for device on date {date_str}: {len(generation_history)}")
             
             if not generation_history:
@@ -1360,6 +1360,10 @@ class Watchdog:
                                 hourly_eff.append(eff)
                             plant_efficiency_7d_hourly.append(hourly_eff)
                             plant_efficiency_7d_labels.append(date_str)
+
+            # Sort filtered_plants by efficiency descending
+            filtered_plants = sorted(filtered_plants, key=lambda x: x['efficiency'], reverse=True)
+
             return {
                 'efficiency_bins': efficiency_bins,
                 'x_labels': x_labels,
