@@ -203,7 +203,7 @@
                                 </td>
                                 <td class="px-4 py-3 wrap-content w-fault">{{ event.fault_details|default(event.fault_code|default('--')) }}</td>
                                 <td class="px-4 py-3 wrap-content w-root">{{ event.root_cause_analysis|default('--') }}</td>
-                                <td class="px-4 py-3 w-status {% if event.is_ongoing_event %}text-red-600 font-semibold{% endif %}">{% if event.is_ongoing_event %}Yes{% else %}No{% endif %}</td>
+                                <td class="px-4 py-3 w-status {% if event.is_ongoing_event and event.is_ongoing_event|string|lower in ['true', 'yes', '1'] %}text-red-600 font-semibold{% endif %}">{% if event.is_ongoing_event and event.is_ongoing_event|string|lower in ['true', 'yes', '1'] %}Yes{% else %}No{% endif %}</td>
                             </tr>
                         {% endfor %}
                     </tbody>
