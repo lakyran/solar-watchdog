@@ -241,66 +241,160 @@ def get_device_disruption_events():
         return jsonify(result)
     except Exception as e:
         return jsonify({'status': 'error', 'message': str(e)}), 500
-
-@app.route('/device/disruptions/view', methods=['GET'])
-def view_device_disruption_events():
-    """Display disruption events for a device in a human-readable HTML format"""
+    
+@app.route('/plant/summary/ingest', methods=['GET'])
+def ingest_plant_energy_summary():
+    """Fetch plant energy summary from Growatt API and store it in the database"""
     try:
-        # Get device_sn and optional date from request data
-        device_sn = request.args.get('device_sn')
-        date_str = request.args.get('date', None)
+        # Get required plant_id parameter
+        plant_id = request.args.get('plant_id')
         
-        # Get the list of inverters for the dropdown
-        try:
-            inverters = watchdog.db_client.get_inverters_list()
-        except Exception as e:
-            logger.error(f"Error fetching inverters list: {str(e)}")
-            inverters = []
+        # Validate the required parameter
+        if not plant_id:
+            return jsonify({
+                'status': 'error',
+                'message': 'plant_id parameter is required'
+            }), 400
         
-        # If device_sn is not provided, use the first inverter as default
-        selected_device_sn = device_sn
-        if not selected_device_sn and inverters:
-            selected_device_sn = inverters[0]['device_sn']
+        # Call the watchdog method to fetch and store plant summary
+        result = watchdog.fetch_and_store_plant_summary(plant_id=plant_id)
         
-        # If still no device_sn, render with error
-        if not selected_device_sn:
-            return render_template('disruption_events.html', 
-                                  device_sn='',
-                                  date=None,
-                                  events=[],
-                                  inverters=inverters,
-                                  error='No device found to display disruptions.')
+        # If the result is a tuple with a status code, handle the error
+        if isinstance(result, tuple) and len(result) > 1:
+            return jsonify(result[0]), result[1]
+            
+        # Return the result as JSON
+        return jsonify(result)
         
-        # Call the watchdog method to get disruption events
-        result = watchdog.get_device_disruption_events_route(selected_device_sn, date_str)
-        
-        # If the result is a tuple with status code, handle the error
-        if isinstance(result, tuple):
-            return render_template('disruption_events.html', 
-                                  device_sn=selected_device_sn,
-                                  date=date_str,
-                                  events=[],
-                                  inverters=inverters,
-                                  error=result[0].get('message', 'Unknown error'))
-        
-        # Extract the events from the result
-        events = result.get('disruption_events', [])
-        
-        # Render the template with the data
-        return render_template('disruption_events.html', 
-                              device_sn=selected_device_sn,
-                              date=date_str if date_str else result.get('date'),
-                              events=events,
-                              inverters=inverters)
-                                  
     except Exception as e:
-        return render_template('disruption_events.html', 
-                              device_sn=device_sn if 'device_sn' in locals() else '',
-                              date=date_str if 'date_str' in locals() else None,
-                              events=[],
-                              inverters=[],
-                              error=str(e))
+        return jsonify({'status': 'error', 'message': str(e)}), 500
 
+@app.route('/plant/summary', methods=['GET'])
+def get_plant_summary():
+    """Get energy summary for a specific plant"""
+    try:
+        # Get required plant_id parameter
+        plant_id = request.args.get('plant_id')
+        
+        # Validate the parameter
+        if not plant_id:
+            return jsonify({
+                'status': 'error',
+                'message': 'plant_id parameter is required'
+            }), 400
+        
+        # Get the plant energy summary from the database
+        summary = watchdog.db_client.get_plant_energy_summary(plant_id)
+        
+        # Check if summary was found
+        if not summary:
+            return jsonify({
+                'status': 'error',
+                'message': f'No energy summary found for plant_id: {plant_id}'
+            }), 404
+        
+        # Return the summary as JSON
+        return jsonify({
+            'status': 'success',
+            'plant_id': plant_id,
+            'summary': summary
+        })
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+@app.route('/users/list', methods=['GET'])
+def get_users_list():
+    """Get a list of all users in the system"""
+    try:
+        # Get the list of users from the database
+        users = watchdog.db_client.get_users_list()
+        
+        # Return the list as JSON
+        return jsonify({
+            'status': 'success',
+            'count': len(users),
+            'users': users
+        })
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+@app.route('/users/onboard', methods=['POST'])
+def onboard_new_user():
+    """
+    Onboard a new user with plants and devices
+    
+    Required POST parameters:
+    - username: Username for the new user
+    - user_id: User ID for the new user
+    - vendor: Vendor name (e.g., 'Growatt')
+    
+    Optional POST parameters:
+    - phone: User's phone number
+    - email: User's email address
+    """
+    try:
+        # Get parameters from request JSON
+        request_data = request.get_json()
+        
+        if not request_data:
+            return jsonify({
+                'status': 'error',
+                'message': 'Request body is required with JSON data'
+            }), 400
+        
+        # Extract required parameters
+        username = request_data.get('username')
+        user_id = request_data.get('user_id')
+        vendor = request_data.get('vendor')
+        
+        # Validate required parameters
+        if not username:
+            return jsonify({'status': 'error', 'message': 'username parameter is required'}), 400
+        if not user_id:
+            return jsonify({'status': 'error', 'message': 'user_id parameter is required'}), 400
+        if not vendor:
+            return jsonify({'status': 'error', 'message': 'vendor parameter is required'}), 400
+        
+        # Extract optional parameters
+        phone = request_data.get('phone')
+        email = request_data.get('email')
+        
+        # Call the onboard_new_user method
+        result = watchdog.onboard_new_user(
+            username=username,
+            user_id=user_id,
+            vendor=vendor,
+            phone=phone,
+            email=email
+        )
+        
+        # Return the result
+        return jsonify(result)
+        
+    except Exception as e:
+        logger.error(f"Error onboarding new user: {str(e)}")
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+@app.route('/plants/list', methods=['GET'])
+def get_plants_list():
+    """Get a list of all plants in the system, optionally filtered by username"""
+    try:
+        # Get optional username parameter
+        username = request.args.get('username', None)
+        
+        # Get the list of plants from the database
+        plants = watchdog.db_client.get_plants_list(username)
+        
+        # Return the list as JSON
+        return jsonify({
+            'status': 'success',
+            'count': len(plants),
+            'username_filter': username,
+            'plants': plants
+        })
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+    
 @app.route('/inverters/list', methods=['GET'])
 def get_inverters_list():
     """Get a list of all inverters in the database, optionally filtered by username"""
@@ -432,6 +526,88 @@ def batch_ingest_inverters_history():
             'total_inverters': len(inverters),
             'processed_inverters': len(results),
             'date': date,
+            'results': results
+        })
+        
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+@app.route('/plants/summary/batch-ingest', methods=['GET'])
+def batch_ingest_plants_summary():
+    """Fetch and store energy summaries for all plants in the system"""
+    try:
+        # Get the list of all plants
+        plants = watchdog.db_client.get_plants_list()
+        
+        if not plants:
+            return jsonify({
+                'status': 'error',
+                'message': 'No plants found in the system'
+            }), 404
+        
+        # Track results for each plant
+        results = []
+        successful_plants = 0
+        failed_plants = 0
+        
+        # Process each plant
+        for plant in plants:
+            plant_id = plant.get('plant_id')
+            
+            # Skip if no plant_id
+            if not plant_id:
+                continue
+                
+            try:
+                # Fetch and store summary for this plant
+                result = watchdog.fetch_and_store_plant_summary(plant_id)
+                
+                # Handle case where response is a tuple (error response)
+                if isinstance(result, tuple) and len(result) > 1:
+                    error_data, status_code = result
+                    # Create a standardized error result
+                    plant_result = {
+                        'plant_id': plant_id,
+                        'user_name': plant.get('user_name', ''),
+                        'status': 'error',
+                        'error': error_data.get('message', 'Unknown error'),
+                        'status_code': status_code
+                    }
+                    failed_plants += 1
+                else:
+                    # Success case
+                    plant_result = {
+                        'plant_id': plant_id,
+                        'user_name': plant.get('user_name', ''),
+                        'status': 'success',
+                        'api_data': result.get('api_data'),
+                        'db_result': result.get('db_result')
+                    }
+                    successful_plants += 1
+                
+                # Add result to results list
+                results.append(plant_result)
+                
+                # Wait for 1 second before processing the next plant to avoid API rate limits
+                time.sleep(1)
+                
+            except Exception as e:
+                # If one plant fails, continue with others but log the error
+                logger.error(f"Error processing plant {plant_id}: {str(e)}")
+                results.append({
+                    'plant_id': plant_id,
+                    'user_name': plant.get('user_name', ''),
+                    'status': 'error',
+                    'error': str(e)
+                })
+                failed_plants += 1
+        
+        # Return the aggregated results
+        return jsonify({
+            'status': 'success',
+            'total_plants': len(plants),
+            'successful_plants': successful_plants,
+            'failed_plants': failed_plants,
             'results': results
         })
         
@@ -578,241 +754,65 @@ def batch_analyze_inverters_disruptions():
         
     except Exception as e:
         return jsonify({'status': 'error', 'message': str(e)}), 500
-
-@app.route('/users/list', methods=['GET'])
-def get_users_list():
-    """Get a list of all users in the system"""
-    try:
-        # Get the list of users from the database
-        users = watchdog.db_client.get_users_list()
-        
-        # Return the list as JSON
-        return jsonify({
-            'status': 'success',
-            'count': len(users),
-            'users': users
-        })
-    except Exception as e:
-        return jsonify({'status': 'error', 'message': str(e)}), 500
-
-@app.route('/users/onboard', methods=['POST'])
-def onboard_new_user():
-    """
-    Onboard a new user with plants and devices
     
-    Required POST parameters:
-    - username: Username for the new user
-    - user_id: User ID for the new user
-    - vendor: Vendor name (e.g., 'Growatt')
-    
-    Optional POST parameters:
-    - phone: User's phone number
-    - email: User's email address
-    """
+@app.route('/device/disruptions/view', methods=['GET'])
+def view_device_disruption_events():
+    """Display disruption events for a device in a human-readable HTML format"""
     try:
-        # Get parameters from request JSON
-        request_data = request.get_json()
+        # Get device_sn and optional date from request data
+        device_sn = request.args.get('device_sn')
+        date_str = request.args.get('date', None)
         
-        if not request_data:
-            return jsonify({
-                'status': 'error',
-                'message': 'Request body is required with JSON data'
-            }), 400
+        # Get the list of inverters for the dropdown
+        try:
+            inverters = watchdog.db_client.get_inverters_list()
+        except Exception as e:
+            logger.error(f"Error fetching inverters list: {str(e)}")
+            inverters = []
         
-        # Extract required parameters
-        username = request_data.get('username')
-        user_id = request_data.get('user_id')
-        vendor = request_data.get('vendor')
+        # If device_sn is not provided, use the first inverter as default
+        selected_device_sn = device_sn
+        if not selected_device_sn and inverters:
+            selected_device_sn = inverters[0]['device_sn']
         
-        # Validate required parameters
-        if not username:
-            return jsonify({'status': 'error', 'message': 'username parameter is required'}), 400
-        if not user_id:
-            return jsonify({'status': 'error', 'message': 'user_id parameter is required'}), 400
-        if not vendor:
-            return jsonify({'status': 'error', 'message': 'vendor parameter is required'}), 400
+        # If still no device_sn, render with error
+        if not selected_device_sn:
+            return render_template('disruption_events.html', 
+                                  device_sn='',
+                                  date=None,
+                                  events=[],
+                                  inverters=inverters,
+                                  error='No device found to display disruptions.')
         
-        # Extract optional parameters
-        phone = request_data.get('phone')
-        email = request_data.get('email')
+        # Call the watchdog method to get disruption events
+        result = watchdog.get_device_disruption_events_route(selected_device_sn, date_str)
         
-        # Call the onboard_new_user method
-        result = watchdog.onboard_new_user(
-            username=username,
-            user_id=user_id,
-            vendor=vendor,
-            phone=phone,
-            email=email
-        )
+        # If the result is a tuple with status code, handle the error
+        if isinstance(result, tuple):
+            return render_template('disruption_events.html', 
+                                  device_sn=selected_device_sn,
+                                  date=date_str,
+                                  events=[],
+                                  inverters=inverters,
+                                  error=result[0].get('message', 'Unknown error'))
         
-        # Return the result
-        return jsonify(result)
+        # Extract the events from the result
+        events = result.get('disruption_events', [])
         
+        # Render the template with the data
+        return render_template('disruption_events.html', 
+                              device_sn=selected_device_sn,
+                              date=date_str if date_str else result.get('date'),
+                              events=events,
+                              inverters=inverters)
+                                  
     except Exception as e:
-        logger.error(f"Error onboarding new user: {str(e)}")
-        return jsonify({'status': 'error', 'message': str(e)}), 500
-
-@app.route('/plants/list', methods=['GET'])
-def get_plants_list():
-    """Get a list of all plants in the system, optionally filtered by username"""
-    try:
-        # Get optional username parameter
-        username = request.args.get('username', None)
-        
-        # Get the list of plants from the database
-        plants = watchdog.db_client.get_plants_list(username)
-        
-        # Return the list as JSON
-        return jsonify({
-            'status': 'success',
-            'count': len(plants),
-            'username_filter': username,
-            'plants': plants
-        })
-    except Exception as e:
-        return jsonify({'status': 'error', 'message': str(e)}), 500
-
-@app.route('/plant/summary/ingest', methods=['GET'])
-def ingest_plant_energy_summary():
-    """Fetch plant energy summary from Growatt API and store it in the database"""
-    try:
-        # Get required plant_id parameter
-        plant_id = request.args.get('plant_id')
-        
-        # Validate the required parameter
-        if not plant_id:
-            return jsonify({
-                'status': 'error',
-                'message': 'plant_id parameter is required'
-            }), 400
-        
-        # Call the watchdog method to fetch and store plant summary
-        result = watchdog.fetch_and_store_plant_summary(plant_id=plant_id)
-        
-        # If the result is a tuple with a status code, handle the error
-        if isinstance(result, tuple) and len(result) > 1:
-            return jsonify(result[0]), result[1]
-            
-        # Return the result as JSON
-        return jsonify(result)
-        
-    except Exception as e:
-        return jsonify({'status': 'error', 'message': str(e)}), 500
-
-@app.route('/plants/summary/batch-ingest', methods=['GET'])
-def batch_ingest_plants_summary():
-    """Fetch and store energy summaries for all plants in the system"""
-    try:
-        # Get the list of all plants
-        plants = watchdog.db_client.get_plants_list()
-        
-        if not plants:
-            return jsonify({
-                'status': 'error',
-                'message': 'No plants found in the system'
-            }), 404
-        
-        # Track results for each plant
-        results = []
-        successful_plants = 0
-        failed_plants = 0
-        
-        # Process each plant
-        for plant in plants:
-            plant_id = plant.get('plant_id')
-            
-            # Skip if no plant_id
-            if not plant_id:
-                continue
-                
-            try:
-                # Fetch and store summary for this plant
-                result = watchdog.fetch_and_store_plant_summary(plant_id)
-                
-                # Handle case where response is a tuple (error response)
-                if isinstance(result, tuple) and len(result) > 1:
-                    error_data, status_code = result
-                    # Create a standardized error result
-                    plant_result = {
-                        'plant_id': plant_id,
-                        'user_name': plant.get('user_name', ''),
-                        'status': 'error',
-                        'error': error_data.get('message', 'Unknown error'),
-                        'status_code': status_code
-                    }
-                    failed_plants += 1
-                else:
-                    # Success case
-                    plant_result = {
-                        'plant_id': plant_id,
-                        'user_name': plant.get('user_name', ''),
-                        'status': 'success',
-                        'api_data': result.get('api_data'),
-                        'db_result': result.get('db_result')
-                    }
-                    successful_plants += 1
-                
-                # Add result to results list
-                results.append(plant_result)
-                
-                # Wait for 1 second before processing the next plant to avoid API rate limits
-                time.sleep(1)
-                
-            except Exception as e:
-                # If one plant fails, continue with others but log the error
-                logger.error(f"Error processing plant {plant_id}: {str(e)}")
-                results.append({
-                    'plant_id': plant_id,
-                    'user_name': plant.get('user_name', ''),
-                    'status': 'error',
-                    'error': str(e)
-                })
-                failed_plants += 1
-        
-        # Return the aggregated results
-        return jsonify({
-            'status': 'success',
-            'total_plants': len(plants),
-            'successful_plants': successful_plants,
-            'failed_plants': failed_plants,
-            'results': results
-        })
-        
-    except Exception as e:
-        return jsonify({'status': 'error', 'message': str(e)}), 500
-
-@app.route('/plant/summary', methods=['GET'])
-def get_plant_summary():
-    """Get energy summary for a specific plant"""
-    try:
-        # Get required plant_id parameter
-        plant_id = request.args.get('plant_id')
-        
-        # Validate the parameter
-        if not plant_id:
-            return jsonify({
-                'status': 'error',
-                'message': 'plant_id parameter is required'
-            }), 400
-        
-        # Get the plant energy summary from the database
-        summary = watchdog.db_client.get_plant_energy_summary(plant_id)
-        
-        # Check if summary was found
-        if not summary:
-            return jsonify({
-                'status': 'error',
-                'message': f'No energy summary found for plant_id: {plant_id}'
-            }), 404
-        
-        # Return the summary as JSON
-        return jsonify({
-            'status': 'success',
-            'plant_id': plant_id,
-            'summary': summary
-        })
-    except Exception as e:
-        return jsonify({'status': 'error', 'message': str(e)}), 500
+        return render_template('disruption_events.html', 
+                              device_sn=device_sn if 'device_sn' in locals() else '',
+                              date=date_str if 'date_str' in locals() else None,
+                              events=[],
+                              inverters=[],
+                              error=str(e))
 
 @app.route('/dashboard', methods=['GET'])
 def get_user_dashboard():
