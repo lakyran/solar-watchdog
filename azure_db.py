@@ -1451,7 +1451,7 @@ class AzureDB:
         
         Args:
             user_data (dict): Dictionary containing user information with keys:
-                              user_id, user_name, vendor, phone, email
+                              user_id, user_name, vendor, phone, email, password_hash, role
                               
         Returns:
             dict: Result of the operation with status
@@ -1480,17 +1480,23 @@ class AzureDB:
             if 'registered_on' not in user_data or not user_data['registered_on']:
                 user_data['registered_on'] = self.get_current_time_ist()
             
+            # Set default role if not provided
+            if 'role' not in user_data or not user_data['role']:
+                user_data['role'] = 'user'
+            
             self.logger.info(f"Inserting user with ID: {user_data['user_id']}, Name: {user_data['user_name']}")
             
             # Insert user into database table
             cursor.execute(
                 """
                 INSERT INTO users 
-                (user_id, user_name, vendor, phone, email, registered_on)
-                VALUES (%s, %s, %s, %s, %s, %s)
+                (user_id, user_name, vendor, phone, email, registered_on, password_hash, role)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
                 ON CONFLICT (user_id, user_name, vendor) DO UPDATE
                 SET phone = EXCLUDED.phone,
-                    email = EXCLUDED.email
+                    email = EXCLUDED.email,
+                    password_hash = EXCLUDED.password_hash,
+                    role = EXCLUDED.role
                 """,
                 (
                     user_data['user_id'],
@@ -1498,7 +1504,9 @@ class AzureDB:
                     user_data['vendor'],
                     user_data.get('phone', None),
                     user_data.get('email', None),
-                    user_data['registered_on']
+                    user_data['registered_on'],
+                    user_data.get('password_hash', None),
+                    user_data.get('role', 'user')
                 )
             )
             

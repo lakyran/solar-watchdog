@@ -934,7 +934,7 @@ class Watchdog:
             self.logger.error(error_msg)
             raise Exception(error_msg)
             
-    def onboard_new_user(self, username, user_id, vendor, phone=None, email=None):
+    def onboard_new_user(self, username, user_id, vendor, phone=None, email=None, password=None, role=None, bootstrap_history=True):
         """
         Onboard a new user by:
         1. Inserting the user into the database
@@ -943,7 +943,7 @@ class Watchdog:
         4. Fetching and storing plant summary for each plant
         5. Fetching devices for each plant
         6. Inserting inverters (device type 1 or 7) into the database
-        7. Bootstrap historical data ingestion for all inverters
+        7. (Optional) Bootstrap historical data ingestion for all inverters
         
         Args:
             username (str): Username for the new user
@@ -951,6 +951,9 @@ class Watchdog:
             vendor (str): Vendor name (e.g., 'Growatt')
             phone (str, optional): User's phone number
             email (str, optional): User's email address
+            password (str, optional): User's password
+            role (str, optional): User's role (default is 'user')
+            bootstrap_history (bool, optional): Whether to bootstrap historical data (default is True)
             
         Returns:
             dict: Summary of the onboarding process
@@ -976,8 +979,14 @@ class Watchdog:
                 'user_name': username, 
                 'vendor': vendor,
                 'phone': phone,
-                'email': email
+                'email': email,
+                'role': role or 'user'
             }
+            
+            # If password is provided, hash it
+            if password:
+                from werkzeug.security import generate_password_hash
+                user_data['password_hash'] = generate_password_hash(password)
             
             user_result = self.db_client.insert_user(user_data)
             if user_result['status'] != 'success':
@@ -1104,29 +1113,33 @@ class Watchdog:
                             self.logger.error(f"Failed to insert inverter {device_sn}: {inverter_result['message']}")
                     except Exception as e:
                         self.logger.error(f"Failed to insert inverter {device_sn}: {str(e)}")
-                
-            # Step 7: Bootstrap historical data ingestion for all inverters
-            self.logger.info(f"Step 7: Bootstrapping historical data ingestion for {summary['inverters_count']} inverters")
             
-            for inverter in summary['inverters']:
-                device_sn = inverter['device_sn']
-                try:
-                    # Bootstrap historical data for this inverter
-                    bootstrap_result = self.bootstrap_history_ingestion_for_new_user(device_sn)
-                    summary['history_bootstrap'].append({
-                        'device_sn': device_sn,
-                        'result': bootstrap_result
-                    })
-                except Exception as e:
-                    self.logger.error(f"Failed to bootstrap history for inverter {device_sn}: {str(e)}")
-                    summary['history_bootstrap'].append({
-                        'device_sn': device_sn,
-                        'status': 'error',
-                        'error': str(e)
-                    })
+            # Step 7: Bootstrap historical data ingestion for all inverters (if enabled)
+            if bootstrap_history:
+                self.logger.info(f"Step 7: Bootstrapping historical data ingestion for {summary['inverters_count']} inverters")
                 
-                # Add a small delay to avoid overwhelming the API
-                time.sleep(2)
+                for inverter in summary['inverters']:
+                    device_sn = inverter['device_sn']
+                    try:
+                        # Bootstrap historical data for this inverter
+                        bootstrap_result = self.bootstrap_history_ingestion_for_new_user(device_sn)
+                        summary['history_bootstrap'].append({
+                            'device_sn': device_sn,
+                            'result': bootstrap_result
+                        })
+                    except Exception as e:
+                        self.logger.error(f"Failed to bootstrap history for inverter {device_sn}: {str(e)}")
+                        summary['history_bootstrap'].append({
+                            'device_sn': device_sn,
+                            'status': 'error',
+                            'error': str(e)
+                        })
+                    
+                    # Add a small delay to avoid overwhelming the API
+                    time.sleep(2)
+            else:
+                self.logger.info("Step 7: Bootstrap historical data ingestion skipped as per request")
+                summary['bootstrap_history'] = False
             
             # Return the complete summary
             self.logger.info(f"Completed onboarding for user {username}: {summary['plants_count']} plants, {summary['inverters_count']} inverters")

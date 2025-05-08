@@ -326,6 +326,9 @@ def onboard_new_user():
     Optional POST parameters:
     - phone: User's phone number
     - email: User's email address
+    - password: User's password (will be hashed)
+    - role: User's role (default is 'user')
+    - bootstrap_history: Boolean indicating whether to fetch historical data (default is True)
     """
     try:
         # Get parameters from request JSON
@@ -353,6 +356,16 @@ def onboard_new_user():
         # Extract optional parameters
         phone = request_data.get('phone')
         email = request_data.get('email')
+        password = request_data.get('password')
+        role = request_data.get('role')
+        
+        # Handle bootstrap_history parameter - convert to boolean
+        bootstrap_history = True  # Default is True
+        if 'bootstrap_history' in request_data:
+            bootstrap_param = request_data.get('bootstrap_history')
+            bootstrap_history = bootstrap_param.lower() in ('true', 'yes', '1')
+        
+        logger.info(f"User onboarding for {username} with bootstrap_history={bootstrap_history}")
         
         # Call the onboard_new_user method
         result = watchdog.onboard_new_user(
@@ -360,7 +373,10 @@ def onboard_new_user():
             user_id=user_id,
             vendor=vendor,
             phone=phone,
-            email=email
+            email=email,
+            password=password,
+            role=role,
+            bootstrap_history=bootstrap_history
         )
         
         # Return the result
