@@ -3,8 +3,11 @@ import logging
 from dotenv import load_dotenv
 from watchdog import Watchdog
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 import pytz
+from flask_jwt_extended import JWTManager, create_access_token, get_jwt_identity, jwt_required, create_refresh_token, get_jwt, verify_jwt_in_request, jwt_required, current_user
+import os
+from werkzeug.security import check_password_hash
 
 # Configure logging
 logging.basicConfig(
@@ -20,6 +23,115 @@ load_dotenv()
 
 # Initialize the app
 app = Flask(__name__, static_folder='static')
+
+# Configure JWT
+app.config["JWT_SECRET_KEY"] = os.getenv("JWT_SECRET_KEY", "dev-secret-key-change-in-production")
+app.config["JWT_ACCESS_TOKEN_EXPIRES"] = timedelta(hours=24)
+app.config["JWT_REFRESH_TOKEN_EXPIRES"] = timedelta(days=30)
+jwt = JWTManager(app)
+
+# JWT error handlers
+@jwt.expired_token_loader
+def expired_token_callback(jwt_header, jwt_payload):
+    """Handle expired tokens gracefully"""
+    token_type = jwt_payload["type"]
+    return jsonify({
+        "status": "error",
+        "message": f"The {token_type} token has expired",
+        "code": "token_expired"
+    }), 401
+
+@jwt.invalid_token_loader
+def invalid_token_callback(error):
+    """Handle invalid tokens"""
+    return jsonify({
+        "status": "error",
+        "message": "Invalid token",
+        "code": "invalid_token"
+    }), 401
+
+@jwt.unauthorized_loader
+def missing_token_callback(error):
+    """Handle missing tokens"""
+    return jsonify({
+        "status": "error",
+        "message": "Authentication required",
+        "code": "authorization_required"
+    }), 401
+
+@jwt.needs_fresh_token_loader
+def token_not_fresh_callback(jwt_header, jwt_payload):
+    """Handle cases where a fresh token is required"""
+    return jsonify({
+        "status": "error",
+        "message": "Fresh token required",
+        "code": "fresh_token_required"
+    }), 401
+
+@jwt.revoked_token_loader
+def revoked_token_callback(jwt_header, jwt_payload):
+    """Handle revoked tokens"""
+    return jsonify({
+        "status": "error",
+        "message": "Token has been revoked",
+        "code": "token_revoked"
+    }), 401
+
+# Utility function for admin-only routes
+def admin_required():
+    """
+    Decorator utility to check if the current user has admin role
+    Must be used after @jwt_required()
+    """
+    current_username = get_jwt_identity()
+    current_user = watchdog.db_client.get_user(current_username)
+    
+    if not current_user or current_user.get('role') != 'admin':
+        return jsonify({
+            'status': 'error',
+            'message': 'Unauthorized: Admin privileges required'
+        }), 403
+    
+    return None
+
+# Utility function to check if a user has access to a device
+def check_device_access(device_sn):
+    """
+    Check if the current user has access to the specified device
+    
+    Args:
+        device_sn (str): Device serial number to check access for
+        
+    Returns:
+        None if access is allowed, or a tuple with error response if not
+    """
+    # Get current user identity from JWT token
+    current_username = get_jwt_identity()
+    
+    # Get the device metadata
+    device_metadata = watchdog.db_client.get_inverter_record(device_sn)
+    
+    # If device doesn't exist, return error
+    if not device_metadata:
+        return jsonify({
+            'status': 'error',
+            'message': f'Device not found: {device_sn}'
+        }), 404
+    
+    # If the device belongs to the user or user is admin, allow access
+    if device_metadata.get('user_name') == current_username:
+        return None
+        
+    # Check if user is admin
+    admin_check = admin_required()
+    if not admin_check:
+        return None
+        
+    # If we get here, user doesn't have access
+    return jsonify({
+        'status': 'error',
+        'message': 'Unauthorized: You do not have access to this device'
+    }), 403
 
 @app.route('/favicon.ico')
 def favicon():
@@ -40,11 +152,151 @@ def get_current_time_ist():
     """
     return datetime.now(ist_timezone)
 
+@app.route('/login', methods=['POST'])
+def login():
+    """
+    Authenticate user and issue JWT tokens
+    
+    Required POST parameters:
+    - username: Username for authentication
+    - password: User password
+    
+    Returns:
+        JSON: Access token and refresh token if authentication is successful
+    """
+    try:
+        # Get username and password from request
+        username = request.json.get("username", None)
+        password = request.json.get("password", None)
+        
+        # Validate required parameters
+        if not username:
+            return jsonify({"status": "error", "message": "Username is required"}), 400
+        if not password:
+            return jsonify({"status": "error", "message": "Password is required"}), 400
+        
+        # Get user from database
+        user = watchdog.db_client.get_user(username)
+        
+        # Check if user exists
+        if not user:
+            return jsonify({"status": "error", "message": "Invalid username or password"}), 401
+        
+        # Check password
+        if not user.get('password_hash') or not check_password_hash(user.get('password_hash'), password):
+            return jsonify({"status": "error", "message": "Invalid username or password"}), 401
+        
+        # Create access token and refresh token
+        additional_claims = {
+            "role": user.get('role', 'user'),
+            "user_id": user.get('user_id')
+        }
+        
+        access_token = create_access_token(
+            identity=username,
+            additional_claims=additional_claims
+        )
+        
+        refresh_token = create_refresh_token(
+            identity=username,
+            additional_claims=additional_claims
+        )
+        
+        # Return tokens
+        return jsonify({
+            "status": "success",
+            "access_token": access_token,
+            "refresh_token": refresh_token,
+            "user": {
+                "username": username,
+                "role": user.get('role', 'user')
+            }
+        })
+        
+    except Exception as e:
+        logger.error(f"Login error: {str(e)}")
+        return jsonify({"status": "error", "message": "Authentication failed"}), 500
+
+@app.route('/refresh', methods=['POST'])
+@jwt_required(refresh=True)
+def refresh():
+    """
+    Issue a new access token using a valid refresh token
+    
+    Required: Valid refresh token in the Authorization header
+    
+    Returns:
+        JSON: New access token
+    """
+    try:
+        # Get current user identity from the refresh token
+        current_username = get_jwt_identity()
+        
+        # Get the JWT claims from the refresh token
+        jwt_claims = get_jwt()
+        
+        # Create a new access token with the same additional claims
+        additional_claims = {
+            "role": jwt_claims.get("role", "user"),
+            "user_id": jwt_claims.get("user_id")
+        }
+        
+        access_token = create_access_token(
+            identity=current_username,
+            additional_claims=additional_claims
+        )
+        
+        # Return the new access token
+        return jsonify({
+            "status": "success",
+            "access_token": access_token,
+            "user": {
+                "username": current_username,
+                "role": jwt_claims.get("role", "user")
+            }
+        })
+        
+    except Exception as e:
+        logger.error(f"Token refresh error: {str(e)}")
+        return jsonify({"status": "error", "message": "Failed to refresh token"}), 500
+
+@app.route('/validate', methods=['POST'])
+@jwt_required()
+def validate_token():
+    """
+    Validate that an access token is still valid
+    
+    Returns:
+        JSON: Token validity status and user info
+    """
+    try:
+        # Get current user identity
+        current_username = get_jwt_identity()
+        
+        # Get the JWT claims
+        jwt_claims = get_jwt()
+        
+        # Return success with user info
+        return jsonify({
+            "status": "success",
+            "message": "Token is valid",
+            "user": {
+                "username": current_username,
+                "role": jwt_claims.get("role", "user"),
+                "user_id": jwt_claims.get("user_id")
+            }
+        })
+        
+    except Exception as e:
+        logger.error(f"Token validation error: {str(e)}")
+        return jsonify({"status": "error", "message": "Invalid token"}), 401
+
 @app.route('/', methods=['GET'])
 def hello():
     return render_template('welcome.html')
 
 @app.route('/device/history/test', methods=['GET'])
+@jwt_required()
 def test_growatt_device_history():
     """Test the Growatt API call to fetch device history without storing it"""
     try:
@@ -58,6 +310,11 @@ def test_growatt_device_history():
             return jsonify({'status': 'error', 'message': 'device_sn parameter is required'}), 400
         if not date_str:
             return jsonify({'status': 'error', 'message': 'date parameter is required'}), 400
+            
+        # Check access to the device
+        access_check = check_device_access(device_sn)
+        if access_check:
+            return access_check
             
         # Get device metadata from inverter records
         inverter_metadata = watchdog.db_client.get_inverter_record(device_sn)
@@ -99,6 +356,7 @@ def test_growatt_device_history():
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
 @app.route('/device/history/ingest', methods=['GET'])
+@jwt_required()
 def ingest_device_generation_history():
     try:
         # Get device_sn and date from request data
@@ -106,16 +364,23 @@ def ingest_device_generation_history():
         date = request.args.get('date', None)
         overwrite = request.args.get('overwrite', False)
         store_records = request.args.get('store_records', False)
+        
         # Validate that both parameters are provided
         if not device_sn:
-            return jsonify({'error': 'device_sn parameter is required'}), 400
+            return jsonify({'status': 'error', 'message': 'device_sn parameter is required'}), 400
+            
+        # Check access to the device
+        access_check = check_device_access(device_sn)
+        if access_check:
+            return access_check
             
         response = watchdog.fetch_and_store_device_generation_history(device_sn, date, overwrite, store_records)
         return jsonify(response)
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'status': 'error', 'message': str(e)}), 500
 
 @app.route('/device/history', methods=['GET'])
+@jwt_required()
 def get_device_history():
     try:
         # Get device_sn, plant_id, and date from request data
@@ -125,7 +390,33 @@ def get_device_history():
         
         # Validate that at least one of device_sn or plant_id and date are provided
         if (not device_sn and not plant_id) or not date:
-            return jsonify({'error': 'device_sn or plant_id and date parameters are required'}), 400
+            return jsonify({'status': 'error', 'message': 'device_sn or plant_id and date parameters are required'}), 400
+        
+        # Check access based on device_sn or plant_id
+        if device_sn:
+            access_check = check_device_access(device_sn)
+            if access_check:
+                return access_check
+        elif plant_id:
+            # Get current user
+            current_username = get_jwt_identity()
+            
+            # Check if plant belongs to user or user is admin
+            plant_info = None
+            all_plants = watchdog.db_client.get_plants_list()
+            for p in all_plants:
+                if p.get('plant_id') == plant_id:
+                    plant_info = p
+                    break
+            
+            if not plant_info:
+                return jsonify({'status': 'error', 'message': f'Plant not found: {plant_id}'}), 404
+                
+            if plant_info.get('user_name') != current_username:
+                # Check if user is admin
+                admin_check = admin_required()
+                if admin_check:
+                    return admin_check
         
         # If both device_sn and plant_id are provided, use device_sn
         records = watchdog.get_device_history_records(device_sn=device_sn, plant_id=plant_id, date_str=date)
@@ -137,9 +428,10 @@ def get_device_history():
             'records': records if records else []
         })
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'status': 'error', 'message': str(e)}), 500
 
 @app.route('/device/analyze_disruptions', methods=['GET'])
+@jwt_required()
 def analyze_device_generation_disruptions():
     try:
         # Get device_sn and date from request data
@@ -148,13 +440,19 @@ def analyze_device_generation_disruptions():
         
         # Validate that device_sn is provided
         if not device_sn:
-            return jsonify({'error': 'device_sn parameter is required'}), 400
+            return jsonify({'status': 'error', 'message': 'device_sn parameter is required'}), 400
+            
+        # Check access to the device
+        access_check = check_device_access(device_sn)
+        if access_check:
+            return access_check
             
         return jsonify(watchdog.analyze_device_generation_data_route(device_sn, date_str))
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'status': 'error', 'message': str(e)}), 500
 
 @app.route('/device/analyze_and_store_disruptions', methods=['GET'])
+@jwt_required()
 def analyze_and_store_device_disruptions():
     try:
         # Get device_sn and date from request data
@@ -163,13 +461,19 @@ def analyze_and_store_device_disruptions():
         
         # Validate that device_sn is provided
         if not device_sn:
-            return jsonify({'error': 'device_sn parameter is required'}), 400
+            return jsonify({'status': 'error', 'message': 'device_sn parameter is required'}), 400
+            
+        # Check access to the device
+        access_check = check_device_access(device_sn)
+        if access_check:
+            return access_check
             
         return jsonify(watchdog.analyze_device_generation_data_and_store_disruptions_route(device_sn, date_str))
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'status': 'error', 'message': str(e)}), 500
     
 @app.route('/device/analyze_disruptions_range', methods=['GET'])
+@jwt_required()
 def analyze_device_disruptions_date_range():
     """Analyze disruptions for a device over a range of dates (as a background task)"""
     try:
@@ -182,6 +486,15 @@ def analyze_device_disruptions_date_range():
             overwrite = False
         else:
             overwrite = True
+        
+        # Validate that device_sn is provided
+        if not device_sn:
+            return jsonify({'status': 'error', 'message': 'device_sn parameter is required'}), 400
+            
+        # Check access to the device
+        access_check = check_device_access(device_sn)
+        if access_check:
+            return access_check
         
         # Delegate to the watchdog service to handle all logic including date population
         result = watchdog.analyze_device_disruptions_date_range(
@@ -202,18 +515,32 @@ def analyze_device_disruptions_date_range():
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
 @app.route('/tasks/<task_id>', methods=['GET'])
+@jwt_required()
 def get_task_status(task_id):
     """Get the status of a background task"""
-    task_status = watchdog.get_task_status(task_id)
-    
-    # If the result is a tuple with status code, handle it
-    if isinstance(task_status, tuple) and len(task_status) > 1:
-        return jsonify(task_status[0]), task_status[1]
-    
-    # Otherwise return the result as JSON
-    return jsonify(task_status)
+    try:
+        task_status = watchdog.get_task_status(task_id)
+        
+        # Check if the task exists
+        if isinstance(task_status, tuple) and task_status[1] == 404:
+            return jsonify(task_status[0]), task_status[1]
+            
+        # Get the task details
+        task = watchdog.background_tasks.get(task_id)
+        
+        # If the task is found, check if user has access to it
+        if task and 'device_sn' in task:
+            access_check = check_device_access(task['device_sn'])
+            if access_check:
+                return access_check
+        
+        # Return the task status
+        return jsonify(task_status)
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
 
 @app.route('/device/disruption_events', methods=['GET'])
+@jwt_required()
 def get_device_disruption_events():
     """Get disruption events for a device, optionally filtered by date"""
     try:
@@ -224,6 +551,11 @@ def get_device_disruption_events():
         # Validate that device_sn is provided
         if not device_sn:
             return jsonify({'status': 'error', 'message': 'device_sn parameter is required'}), 400
+            
+        # Check access to the device
+        access_check = check_device_access(device_sn)
+        if access_check:
+            return access_check
             
         # Call the watchdog method to get disruption events
         result = watchdog.get_device_disruption_events_route(device_sn, date_str)
@@ -238,6 +570,7 @@ def get_device_disruption_events():
         return jsonify({'status': 'error', 'message': str(e)}), 500
     
 @app.route('/plant/summary/ingest', methods=['GET'])
+@jwt_required()
 def ingest_plant_energy_summary():
     """Fetch plant energy summary from Growatt API and store it in the database"""
     try:
@@ -250,6 +583,29 @@ def ingest_plant_energy_summary():
                 'status': 'error',
                 'message': 'plant_id parameter is required'
             }), 400
+            
+        # Check if the user has access to this plant
+        current_username = get_jwt_identity()
+        
+        # Get plant details
+        plant_details = None
+        all_plants = watchdog.db_client.get_plants_list()
+        for p in all_plants:
+            if p.get('plant_id') == plant_id:
+                plant_details = p
+                break
+                
+        if not plant_details:
+            return jsonify({
+                'status': 'error',
+                'message': f'Plant not found: {plant_id}'
+            }), 404
+            
+        # Check if plant belongs to current user or if user is admin
+        if plant_details.get('user_name') != current_username:
+            admin_check = admin_required()
+            if admin_check:
+                return admin_check
         
         # Call the watchdog method to fetch and store plant summary
         result = watchdog.fetch_and_store_plant_summary(plant_id=plant_id)
@@ -265,6 +621,7 @@ def ingest_plant_energy_summary():
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
 @app.route('/plant/summary', methods=['GET'])
+@jwt_required()
 def get_plant_summary():
     """Get energy summary for a specific plant"""
     try:
@@ -277,6 +634,29 @@ def get_plant_summary():
                 'status': 'error',
                 'message': 'plant_id parameter is required'
             }), 400
+            
+        # Check if user has access to this plant
+        current_username = get_jwt_identity()
+        
+        # Get plant details
+        plant_details = None
+        all_plants = watchdog.db_client.get_plants_list()
+        for p in all_plants:
+            if p.get('plant_id') == plant_id:
+                plant_details = p
+                break
+                
+        if not plant_details:
+            return jsonify({
+                'status': 'error',
+                'message': f'Plant not found: {plant_id}'
+            }), 404
+            
+        # Check if plant belongs to current user or if user is admin
+        if plant_details.get('user_name') != current_username:
+            admin_check = admin_required()
+            if admin_check:
+                return admin_check
         
         # Get the plant energy summary from the database
         summary = watchdog.db_client.get_plant_energy_summary(plant_id)
@@ -298,9 +678,15 @@ def get_plant_summary():
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
 @app.route('/users/list', methods=['GET'])
+@jwt_required()
 def get_users_list():
     """Get a list of all users in the system"""
     try:
+        # Check if current user has admin rights
+        admin_check = admin_required()
+        if admin_check:
+            return admin_check
+            
         # Get the list of users from the database
         users = watchdog.db_client.get_users_list()
         
@@ -313,7 +699,44 @@ def get_users_list():
     except Exception as e:
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
+@app.route('/me', methods=['GET'])
+@jwt_required()
+def get_user_profile():
+    """
+    Get the current user's profile
+    
+    Returns:
+        JSON: User profile information
+    """
+    try:
+        # Get current user identity from JWT token
+        current_username = get_jwt_identity()
+        
+        # Get user from database
+        user = watchdog.db_client.get_user(current_username)
+        
+        # Check if user exists
+        if not user:
+            return jsonify({"status": "error", "message": "User not found"}), 404
+        
+        # Return user profile (excluding sensitive information)
+        return jsonify({
+            "status": "success",
+            "user": {
+                "username": user.get('user_name'),
+                "role": user.get('role', 'user'),
+                "email": user.get('email'),
+                "phone": user.get('phone'),
+                "vendor": user.get('vendor')
+            }
+        })
+        
+    except Exception as e:
+        logger.error(f"Error fetching user profile: {str(e)}")
+        return jsonify({"status": "error", "message": "Failed to fetch user profile"}), 500
+
 @app.route('/users/onboard', methods=['POST'])
+@jwt_required()
 def onboard_new_user():
     """
     Onboard a new user with plants and devices
@@ -331,6 +754,11 @@ def onboard_new_user():
     - bootstrap_history: Boolean indicating whether to fetch historical data (default is True)
     """
     try:
+        # Check if current user has admin rights
+        admin_check = admin_required()
+        if admin_check:
+            return admin_check
+            
         # Get parameters from request JSON
         request_data = request.get_json()
         
@@ -387,37 +815,75 @@ def onboard_new_user():
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
 @app.route('/plants/list', methods=['GET'])
+@jwt_required()
 def get_plants_list():
     """Get a list of all plants in the system, optionally filtered by username"""
     try:
+        # Get current user identity from JWT token
+        current_username = get_jwt_identity()
+        
         # Get optional username parameter
-        username = request.args.get('username', None)
+        username_param = request.args.get('username', None)
+        
+        # If a specific username is requested and it's not the current user, check admin privileges
+        if username_param and username_param != current_username:
+            admin_check = admin_required()
+            if admin_check:
+                return admin_check
+        
+        # If no username is specified, check if user is admin
+        if not username_param:
+            # Get current user
+            current_user = watchdog.db_client.get_user(current_username)
+            
+            # If not admin, use their own username
+            if not current_user or current_user.get('role') != 'admin':
+                username_param = current_username
         
         # Get the list of plants from the database
-        plants = watchdog.db_client.get_plants_list(username)
+        plants = watchdog.db_client.get_plants_list(username_param)
         
         # Return the list as JSON
         return jsonify({
             'status': 'success',
             'count': len(plants),
-            'username_filter': username,
+            'username_filter': username_param,
             'plants': plants
         })
     except Exception as e:
         return jsonify({'status': 'error', 'message': str(e)}), 500
     
 @app.route('/inverters/list', methods=['GET'])
+@jwt_required()
 def get_inverters_list():
     """Get a list of all inverters in the database, optionally filtered by username"""
     try:
+        # Get current user identity from JWT token
+        current_username = get_jwt_identity()
+        
         # Get optional username parameter
-        username = request.args.get('username', None)
+        username_param = request.args.get('username', None)
+        
+        # If a specific username is requested and it's not the current user, check admin privileges
+        if username_param and username_param != current_username:
+            admin_check = admin_required()
+            if admin_check:
+                return admin_check
+        
+        # If no username is specified, check if user is admin
+        if not username_param:
+            # Get current user
+            current_user = watchdog.db_client.get_user(current_username)
+            
+            # If not admin, use their own username
+            if not current_user or current_user.get('role') != 'admin':
+                username_param = current_username
         
         # Get the list of inverters from the database
-        inverters = watchdog.db_client.get_inverters_list(username)
+        inverters = watchdog.db_client.get_inverters_list(username_param)
         
         # Get the list of plants (will be filtered by username if provided)
-        plants = watchdog.db_client.get_plants_list(username)
+        plants = watchdog.db_client.get_plants_list(username_param)
         
         # Create a dictionary of plants by plant_id for easy lookup
         plants_dict = {plant['plant_id']: plant for plant in plants}
@@ -434,16 +900,22 @@ def get_inverters_list():
         return jsonify({
             'status': 'success',
             'count': len(inverters),
-            'username_filter': username,
+            'username_filter': username_param,
             'inverters': inverters
         })
     except Exception as e:
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
 @app.route('/devices/history/batch-ingest', methods=['GET'])
+@jwt_required()
 def batch_ingest_inverters_history():
     """Get a list of all inverters and ingest generation history for each one"""
     try:
+        # This is an admin-only endpoint
+        admin_check = admin_required()
+        if admin_check:
+            return admin_check
+            
         # Optional query parameters
         date = request.args.get('date', None)
         overwrite = request.args.get('overwrite', 'false')
@@ -628,9 +1100,15 @@ def batch_ingest_plants_summary():
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
 @app.route('/devices/disruptions/batch-analyze', methods=['GET'])
+@jwt_required()
 def batch_analyze_inverters_disruptions():
     """Analyze disruptions for all inverters in the database, processing each one sequentially"""
     try:
+        # Check if user is admin
+        admin_check = admin_required()
+        if admin_check:
+            return admin_check
+    
         # Get parameters from request
         start_date = request.args.get('start_date')
         end_date = request.args.get('end_date')
@@ -769,21 +1247,24 @@ def batch_analyze_inverters_disruptions():
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
 @app.route('/dashboard', methods=['GET'])
+@jwt_required()
 def get_user_dashboard():
     """Get dashboard data for a specific user including their plant details and summary"""
     try:
-        # Get required username parameter
-        username = request.args.get('username')
+        # Get current user from JWT token
+        current_username = get_jwt_identity()
         
-        # Validate the parameter
-        if not username:
-            return jsonify({
-                'status': 'error',
-                'message': 'username parameter is required'
-            }), 400
+        # Get optional username parameter (for admins to view other users' dashboards)
+        username_param = request.args.get('username', current_username)
+        
+        # If requesting another user's dashboard, check admin privileges
+        if username_param != current_username:
+            admin_check = admin_required()
+            if admin_check:
+                return admin_check
         
         # Call the watchdog method to get dashboard data
-        result = watchdog.get_user_dashboard_data(username)
+        result = watchdog.get_user_dashboard_data(username_param)
         
         # If the result is a tuple with a status code, handle the error
         if isinstance(result, tuple) and len(result) > 1:
@@ -929,6 +1410,7 @@ def view_efficiency_snapshot():
         )
 
 @app.route('/plant/energy/daily/ingest', methods=['GET'])
+@jwt_required()
 def ingest_plant_energy_daily_data():
     """Fetch and store daily energy generation data for a plant over a date range"""
     try:
@@ -945,6 +1427,29 @@ def ingest_plant_energy_daily_data():
                 'status': 'error',
                 'message': 'plant_id parameter is required'
             }), 400
+            
+        # Check if the user has access to this plant
+        current_username = get_jwt_identity()
+        
+        # Get plant details
+        plant_details = None
+        all_plants = watchdog.db_client.get_plants_list()
+        for p in all_plants:
+            if p.get('plant_id') == plant_id:
+                plant_details = p
+                break
+                
+        if not plant_details:
+            return jsonify({
+                'status': 'error',
+                'message': f'Plant not found: {plant_id}'
+            }), 404
+            
+        # Check if plant belongs to current user or if user is admin
+        if plant_details.get('user_name') != current_username:
+            admin_check = admin_required()
+            if admin_check:
+                return admin_check
         
         # Call the watchdog method to fetch and store plant energy data
         result = watchdog.fetch_and_store_plant_energy_daily_generation(
@@ -964,9 +1469,15 @@ def ingest_plant_energy_daily_data():
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
 @app.route('/plants/energy/daily/batch-ingest', methods=['GET'])
+@jwt_required()
 def batch_ingest_plant_energy_daily_data():
     """Fetch and store daily energy generation data for all plants"""
     try:
+        # This is an admin-only endpoint
+        admin_check = admin_required()
+        if admin_check:
+            return admin_check
+            
         # Get optional date parameters with defaults
         start_date = request.args.get('start_date')
         end_date = request.args.get('end_date')

@@ -1052,10 +1052,10 @@ class AzureDB:
     
     def get_users_list(self):
         """
-        Get a list of all users in the system by extracting unique user names from the inverters table.
+        Get a list of all users in the database
         
         Returns:
-            list: A list of dictionaries containing user_name and inverter_count for each user
+            list: List of user records
         """
         if not self.connection_pool:
             self.logger.error("Database connection pool not available")
@@ -1069,42 +1069,110 @@ class AzureDB:
             conn = self.connection_pool.getconn()
             cursor = conn.cursor()
             
-            self.logger.debug("Querying list of all users")
-            
-            # Query to get all distinct user names with their inverter counts
+            # Get all users
             cursor.execute(
                 """
-                SELECT user_name, COUNT(DISTINCT device_sn) as inverter_count
-                FROM inverters
-                WHERE user_name IS NOT NULL AND user_name != ''
-                GROUP BY user_name
+                SELECT user_id, user_name, vendor, phone, email, 
+                       TO_CHAR(registered_on, 'YYYY-MM-DD HH24:MI:SS') as registered_on,
+                       role
+                FROM users
                 ORDER BY user_name
                 """
             )
             
-            # Fetch all rows and convert to dictionaries
-            users = []
-            for row in cursor.fetchall():
-                user = {
-                    'user_name': row[0],
-                    'inverter_count': row[1]
-                }
-                users.append(user)
-                
-            self.logger.info(f"Retrieved {len(users)} users from database")
-            return users
+            # Fetch all results
+            users = cursor.fetchall()
+            
+            # Convert to list of dictionaries
+            user_list = []
+            for user in users:
+                user_list.append({
+                    'user_id': user[0],
+                    'user_name': user[1],
+                    'vendor': user[2],
+                    'phone': user[3],
+                    'email': user[4],
+                    'registered_on': user[5],
+                    'role': user[6] or 'user'  # Default to 'user' if role is None
+                })
+            
+            return user_list
             
         except Exception as e:
-            error_msg = f"Error fetching users list: {str(e)}"
-            self.logger.error(error_msg)
-            raise Exception(error_msg)
+            self.logger.error(f"Error retrieving users list: {e}")
+            raise Exception(f"Database error: {str(e)}")
         
         finally:
             if cursor:
                 cursor.close()
             if conn:
                 self.connection_pool.putconn(conn)
-    
+                
+    def get_user(self, username):
+        """
+        Get a single user by username
+        
+        Args:
+            username (str): Username to look up
+            
+        Returns:
+            dict: User record or None if not found
+        """
+        if not self.connection_pool:
+            self.logger.error("Database connection pool not available")
+            raise ValueError("Database connection pool not available")
+        
+        conn = None
+        cursor = None
+        
+        try:
+            # Get connection from pool
+            conn = self.connection_pool.getconn()
+            cursor = conn.cursor()
+            
+            # Get user by username
+            cursor.execute(
+                """
+                SELECT user_id, user_name, vendor, phone, email, 
+                       TO_CHAR(registered_on, 'YYYY-MM-DD HH24:MI:SS') as registered_on,
+                       password_hash, role
+                FROM users
+                WHERE user_name = %s
+                """,
+                (username,)
+            )
+            
+            # Fetch result
+            user = cursor.fetchone()
+            
+            # Return None if user not found
+            if not user:
+                return None
+                
+            # Convert to dictionary
+            user_dict = {
+                'user_id': user[0],
+                'user_name': user[1],
+                'vendor': user[2],
+                'phone': user[3],
+                'email': user[4],
+                'registered_on': user[5],
+                'password_hash': user[6],
+                'role': user[7] or 'user'  # Default to 'user' if role is None
+            }
+            
+            return user_dict
+            
+        except Exception as e:
+            self.logger.error(f"Error retrieving user {username}: {e}")
+            return None
+        
+        finally:
+            if cursor:
+                cursor.close()
+            if conn:
+                self.connection_pool.putconn(conn)
+                
     def get_plants_list(self, username=None):
         """
         Get a list of all plants from the plants table, optionally filtered by username.
