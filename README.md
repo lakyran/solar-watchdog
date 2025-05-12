@@ -24,6 +24,7 @@ The solar monitoring system consists of several core components:
 3. **Growatt API Client** (`growatt.py`) - Handles communication with the Growatt solar monitoring API
 4. **Azure Database Client** (`azure_db.py`) - Manages PostgreSQL database interactions
 5. **AI Analysis Agent** (`ai_agent.py`) - Analyzes solar generation data for disruptions
+6. **Automated WebJobs** - Scheduled tasks for batch operations (located in the `jobs/` directory)
 
 ### Key Features
 
@@ -49,6 +50,12 @@ The solar monitoring system consists of several core components:
 - Plant energy summaries (daily, monthly, yearly, total generation)
 - Carbon offset tracking
 
+#### Scheduled Operations
+- Automated WebJobs for recurring tasks:
+  - Batch ingest of plant summaries (every 6 minutes)
+  - Batch analysis of disruptions (every 10 minutes)
+  - Batch ingest of generation history (scheduled regularly)
+
 ### Database Schema
 
 The system uses a PostgreSQL database with several tables:
@@ -68,10 +75,16 @@ The system follows a well-structured design pattern:
 - Background task support for long-running operations
 - Timezone handling for data consistency (IST standardization)
 - Connection pooling for database efficiency
+- Scheduled WebJobs for automated data processing
 
 ### Recent Enhancements
 
 Several valuable features were recently added to the system:
+
+#### Automated WebJobs for Continuous Monitoring
+- **Batch Ingest Plant Summary** - Runs every 6 minutes to fetch and store the latest energy summaries for all plants
+- **Batch Analyze Disruptions** - Runs every 10 minutes to analyze and identify disruption events for all inverters
+- **Batch Ingest History** - Scheduled task to fetch and store generation history for all inverters
 
 #### User Onboarding Workflow
 - Complete API integration for fetching user plants and devices from Growatt
@@ -82,6 +95,7 @@ Several valuable features were recently added to the system:
 #### Deployment Infrastructure
 - GitHub workflow for deploying to a 'databox' slot on Azure App Service
 - Branch-specific deployment configuration for development and testing
+- WebJob configuration for scheduled tasks
 
 #### Enhanced Disruption Analysis
 - Improved date handling to start analysis from the first available record when no start date is provided
@@ -141,6 +155,24 @@ Several valuable features were recently added to the system:
    ```
    flask run
    ```
+
+## WebJobs Configuration
+
+The system includes several WebJobs for automated tasks:
+
+### Batch Ingest Plant Summary
+- **Schedule**: Runs every 6 minutes (`0 */6 * * * *`)
+- **Purpose**: Fetches and stores the latest energy summary data for all plants
+- **Endpoint**: `/plants/summary/batch-ingest`
+
+### Batch Analyze Disruptions
+- **Schedule**: Runs every 10 minutes (`0 */10 * * * *`)
+- **Purpose**: Analyzes disruptions for all inverters based on their latest analysis date
+- **Endpoint**: `/devices/disruptions/batch-analyze`
+
+### Batch Ingest History
+- **Purpose**: Fetches and stores generation history for all inverters
+- **Endpoint**: `/devices/history/batch-ingest`
 
 ## API Routes
 
