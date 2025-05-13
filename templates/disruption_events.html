@@ -33,7 +33,7 @@
                     // Update device_sn parameter
                     url.searchParams.set('device_sn', selectedValue);
                     
-                    // Navigate to the new URL
+                    // Navigate to the new URL (maintain the same path including /api prefix)
                     window.location.href = url.toString();
                 }
             });
