@@ -8,6 +8,7 @@ import pytz
 from flask_jwt_extended import JWTManager, create_access_token, get_jwt_identity, jwt_required, create_refresh_token, get_jwt, verify_jwt_in_request, jwt_required, current_user
 import os
 from werkzeug.security import check_password_hash
+from functools import wraps
 
 # Configure logging
 logging.basicConfig(
@@ -78,7 +79,7 @@ def revoked_token_callback(jwt_header, jwt_payload):
     }), 401
 
 # Utility function for admin-only routes
-def admin_required():
+def admin_required_old(): # Renaming for safety, will be replaced
     """
     Decorator utility to check if the current user has admin role
     Must be used after @jwt_required()
@@ -93,6 +94,31 @@ def admin_required():
         }), 403
     
     return None
+
+# New decorator
+def admin_required(fn):
+    @wraps(fn)
+    def wrapper(*args, **kwargs):
+        # Ensure JWT is present and valid first
+        # This relies on @jwt_required() being applied before this decorator
+        # verify_jwt_in_request() # This can be used if @jwt_required is not guaranteed to be outer
+        
+        current_username = get_jwt_identity()
+        if not current_username: # Should not happen if @jwt_required is used
+             return jsonify({
+                'status': 'error',
+                'message': 'Authentication required'
+            }), 401
+
+        current_user_data = watchdog.db_client.get_user(current_username)
+        
+        if not current_user_data or current_user_data.get('role') != 'admin':
+            return jsonify({
+                'status': 'error',
+                'message': 'Unauthorized: Admin privileges required'
+            }), 403
+        return fn(*args, **kwargs)
+    return wrapper
 
 # Utility function to check if a user has access to a device
 def check_device_access(device_sn):
@@ -123,8 +149,18 @@ def check_device_access(device_sn):
         return None
         
     # Check if user is admin
-    admin_check = admin_required()
-    if not admin_check:
+    # admin_check = admin_required_old() # Old call
+    # if not admin_check: # This logic changes as admin_required is now a decorator
+    # The check_device_access function needs to be re-evaluated if admin_required decorator is used directly on its routes
+    # For now, we keep the direct check for admin role here if it's a helper function NOT a route.
+    # If this helper is ONLY used by routes that *also* have @admin_required, then this specific check is redundant.
+    # However, if it can be called from a route that is @jwt_required but NOT @admin_required, this is needed.
+
+    # Assuming admin_required decorator will be applied to routes calling this helper,
+    # this explicit admin check might become redundant or needs careful thought.
+    # For now, let's keep the direct role check if we're not decorating this helper itself.
+    user_making_request = watchdog.db_client.get_user(current_username)
+    if user_making_request and user_making_request.get('role') == 'admin':
         return None
         
     # If we get here, user doesn't have access
@@ -414,7 +450,7 @@ def get_device_history():
                 
             if plant_info.get('user_name') != current_username:
                 # Check if user is admin
-                admin_check = admin_required()
+                admin_check = admin_required_old()
                 if admin_check:
                     return admin_check
         
@@ -603,7 +639,7 @@ def ingest_plant_energy_summary():
             
         # Check if plant belongs to current user or if user is admin
         if plant_details.get('user_name') != current_username:
-            admin_check = admin_required()
+            admin_check = admin_required_old()
             if admin_check:
                 return admin_check
         
@@ -654,7 +690,7 @@ def get_plant_summary():
             
         # Check if plant belongs to current user or if user is admin
         if plant_details.get('user_name') != current_username:
-            admin_check = admin_required()
+            admin_check = admin_required_old()
             if admin_check:
                 return admin_check
         
@@ -679,14 +715,10 @@ def get_plant_summary():
 
 @app.route('/users/list', methods=['GET'])
 @jwt_required()
+@admin_required
 def get_users_list():
     """Get a list of all users in the system"""
-    try:
-        # Check if current user has admin rights
-        admin_check = admin_required()
-        if admin_check:
-            return admin_check
-            
+    try:    
         # Get the list of users from the database
         users = watchdog.db_client.get_users_list()
         
@@ -737,6 +769,7 @@ def get_user_profile():
 
 @app.route('/users/onboard', methods=['POST'])
 @jwt_required()
+@admin_required
 def onboard_new_user():
     """
     Onboard a new user with plants and devices
@@ -753,12 +786,7 @@ def onboard_new_user():
     - role: User's role (default is 'user')
     - bootstrap_history: Boolean indicating whether to fetch historical data (default is True)
     """
-    try:
-        # Check if current user has admin rights
-        admin_check = admin_required()
-        if admin_check:
-            return admin_check
-            
+    try:            
         # Get parameters from request JSON
         request_data = request.get_json()
         
@@ -827,7 +855,7 @@ def get_plants_list():
         
         # If a specific username is requested and it's not the current user, check admin privileges
         if username_param and username_param != current_username:
-            admin_check = admin_required()
+            admin_check = admin_required_old()
             if admin_check:
                 return admin_check
         
@@ -866,7 +894,7 @@ def get_inverters_list():
         
         # If a specific username is requested and it's not the current user, check admin privileges
         if username_param and username_param != current_username:
-            admin_check = admin_required()
+            admin_check = admin_required_old()
             if admin_check:
                 return admin_check
         
@@ -908,14 +936,10 @@ def get_inverters_list():
 
 @app.route('/devices/history/batch-ingest', methods=['GET'])
 @jwt_required()
+@admin_required
 def batch_ingest_inverters_history():
     """Get a list of all inverters and ingest generation history for each one"""
-    try:
-        # This is an admin-only endpoint
-        admin_check = admin_required()
-        if admin_check:
-            return admin_check
-            
+    try:    
         # Optional query parameters
         date = request.args.get('date', None)
         overwrite = request.args.get('overwrite', 'false')
@@ -1018,6 +1042,8 @@ def batch_ingest_inverters_history():
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
 @app.route('/plants/summary/batch-ingest', methods=['GET'])
+@jwt_required
+@admin_required
 def batch_ingest_plants_summary():
     """Fetch and store energy summaries for all plants in the system"""
     try:
@@ -1101,14 +1127,10 @@ def batch_ingest_plants_summary():
 
 @app.route('/devices/disruptions/batch-analyze', methods=['GET'])
 @jwt_required()
+@admin_required
 def batch_analyze_inverters_disruptions():
     """Analyze disruptions for all inverters in the database, processing each one sequentially"""
     try:
-        # Check if user is admin
-        admin_check = admin_required()
-        if admin_check:
-            return admin_check
-    
         # Get parameters from request
         start_date = request.args.get('start_date')
         end_date = request.args.get('end_date')
@@ -1259,7 +1281,7 @@ def get_user_dashboard():
         
         # If requesting another user's dashboard, check admin privileges
         if username_param != current_username:
-            admin_check = admin_required()
+            admin_check = admin_required_old()
             if admin_check:
                 return admin_check
         
@@ -1447,7 +1469,7 @@ def ingest_plant_energy_daily_data():
             
         # Check if plant belongs to current user or if user is admin
         if plant_details.get('user_name') != current_username:
-            admin_check = admin_required()
+            admin_check = admin_required_old()
             if admin_check:
                 return admin_check
         
@@ -1470,13 +1492,14 @@ def ingest_plant_energy_daily_data():
 
 @app.route('/plants/energy/daily/batch-ingest', methods=['GET'])
 @jwt_required()
+@admin_required
 def batch_ingest_plant_energy_daily_data():
     """Fetch and store daily energy generation data for all plants"""
     try:
         # This is an admin-only endpoint
-        admin_check = admin_required()
-        if admin_check:
-            return admin_check
+        # admin_check = admin_required_old() # Old call
+        # if admin_check:
+        #    return admin_check
             
         # Get optional date parameters with defaults
         start_date = request.args.get('start_date')
