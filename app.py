@@ -331,6 +331,81 @@ def validate_token():
 def hello():
     return render_template('welcome.html')
 
+@app.route('/users/onboard', methods=['POST'])
+@jwt_required()
+@admin_required
+def onboard_new_user():
+    """
+    Onboard a new user with plants and devices
+    
+    Required POST parameters:
+    - username: Username for the new user
+    - user_id: User ID for the new user
+    - vendor: Vendor name (e.g., 'Growatt')
+    
+    Optional POST parameters:
+    - phone: User's phone number
+    - email: User's email address
+    - password: User's password (will be hashed)
+    - role: User's role (default is 'user')
+    - bootstrap_history: Boolean indicating whether to fetch historical data (default is True)
+    """
+    try:            
+        # Get parameters from request JSON
+        request_data = request.get_json()
+        
+        if not request_data:
+            return jsonify({
+                'status': 'error',
+                'message': 'Request body is required with JSON data'
+            }), 400
+        
+        # Extract required parameters
+        username = request_data.get('username')
+        user_id = request_data.get('user_id')
+        vendor = request_data.get('vendor')
+        
+        # Validate required parameters
+        if not username:
+            return jsonify({'status': 'error', 'message': 'username parameter is required'}), 400
+        if not user_id:
+            return jsonify({'status': 'error', 'message': 'user_id parameter is required'}), 400
+        if not vendor:
+            return jsonify({'status': 'error', 'message': 'vendor parameter is required'}), 400
+        
+        # Extract optional parameters
+        phone = request_data.get('phone')
+        email = request_data.get('email')
+        password = request_data.get('password')
+        role = request_data.get('role')
+        
+        # Handle bootstrap_history parameter - convert to boolean
+        bootstrap_history = True  # Default is True
+        if 'bootstrap_history' in request_data:
+            bootstrap_param = request_data.get('bootstrap_history')
+            bootstrap_history = bootstrap_param.lower() in ('true', 'yes', '1')
+        
+        logger.info(f"User onboarding for {username} with bootstrap_history={bootstrap_history}")
+        
+        # Call the onboard_new_user method
+        result = watchdog.onboard_new_user(
+            username=username,
+            user_id=user_id,
+            vendor=vendor,
+            phone=phone,
+            email=email,
+            password=password,
+            role=role,
+            bootstrap_history=bootstrap_history
+        )
+        
+        # Return the result
+        return jsonify(result)
+        
+    except Exception as e:
+        logger.error(f"Error onboarding new user: {str(e)}")
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
 @app.route('/device/history/test', methods=['GET'])
 @jwt_required()
 def test_growatt_device_history():
@@ -414,55 +489,114 @@ def ingest_device_generation_history():
         return jsonify(response)
     except Exception as e:
         return jsonify({'status': 'error', 'message': str(e)}), 500
-
-@app.route('/device/history', methods=['GET'])
+    
+@app.route('/plant/summary/ingest', methods=['GET'])
 @jwt_required()
-def get_device_history():
+def ingest_plant_energy_summary():
+    """Fetch plant energy summary from Growatt API and store it in the database"""
     try:
-        # Get device_sn, plant_id, and date from request data
-        device_sn = request.args.get('device_sn')
+        # Get required plant_id parameter
         plant_id = request.args.get('plant_id')
-        date = request.args.get('date')
         
-        # Validate that at least one of device_sn or plant_id and date are provided
-        if (not device_sn and not plant_id) or not date:
-            return jsonify({'status': 'error', 'message': 'device_sn or plant_id and date parameters are required'}), 400
+        # Validate the required parameter
+        if not plant_id:
+            return jsonify({
+                'status': 'error',
+                'message': 'plant_id parameter is required'
+            }), 400
+            
+        # Check if the user has access to this plant
+        current_username = get_jwt_identity()
         
-        # Check access based on device_sn or plant_id
-        if device_sn:
-            access_check = check_device_access(device_sn)
-            if access_check:
-                return access_check
-        elif plant_id:
-            # Get current user
-            current_username = get_jwt_identity()
-            
-            # Check if plant belongs to user or user is admin
-            plant_info = None
-            all_plants = watchdog.db_client.get_plants_list()
-            for p in all_plants:
-                if p.get('plant_id') == plant_id:
-                    plant_info = p
-                    break
-            
-            if not plant_info:
-                return jsonify({'status': 'error', 'message': f'Plant not found: {plant_id}'}), 404
+        # Get plant details
+        plant_details = None
+        all_plants = watchdog.db_client.get_plants_list()
+        for p in all_plants:
+            if p.get('plant_id') == plant_id:
+                plant_details = p
+                break
                 
-            if plant_info.get('user_name') != current_username:
-                # Check if user is admin
-                admin_check = admin_required_old()
-                if admin_check:
-                    return admin_check
+        if not plant_details:
+            return jsonify({
+                'status': 'error',
+                'message': f'Plant not found: {plant_id}'
+            }), 404
+            
+        # Check if plant belongs to current user or if user is admin
+        if plant_details.get('user_name') != current_username:
+            admin_check = admin_required_old()
+            if admin_check:
+                return admin_check
         
-        # If both device_sn and plant_id are provided, use device_sn
-        records = watchdog.get_device_history_records(device_sn=device_sn, plant_id=plant_id, date_str=date)
-        return jsonify({
-            'device_sn': device_sn,
-            'plant_id': plant_id,
-            'date': date,
-            'record_count': len(records) if records else 0,
-            'records': records if records else []
-        })
+        # Call the watchdog method to fetch and store plant summary
+        result = watchdog.fetch_and_store_plant_summary(plant_id=plant_id)
+        
+        # If the result is a tuple with a status code, handle the error
+        if isinstance(result, tuple) and len(result) > 1:
+            return jsonify(result[0]), result[1]
+            
+        # Return the result as JSON
+        return jsonify(result)
+        
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+    
+@app.route('/plant/energy/daily/ingest', methods=['GET'])
+@jwt_required()
+def ingest_plant_energy_daily_data():
+    """Fetch and store daily energy generation data for a plant over a date range"""
+    try:
+        # Get required plant_id parameter
+        plant_id = request.args.get('plant_id')
+        
+        # Get optional date parameters with defaults
+        start_date = request.args.get('start_date')
+        end_date = request.args.get('end_date')
+        
+        # Validate the required parameter
+        if not plant_id:
+            return jsonify({
+                'status': 'error',
+                'message': 'plant_id parameter is required'
+            }), 400
+            
+        # Check if the user has access to this plant
+        current_username = get_jwt_identity()
+        
+        # Get plant details
+        plant_details = None
+        all_plants = watchdog.db_client.get_plants_list()
+        for p in all_plants:
+            if p.get('plant_id') == plant_id:
+                plant_details = p
+                break
+                
+        if not plant_details:
+            return jsonify({
+                'status': 'error',
+                'message': f'Plant not found: {plant_id}'
+            }), 404
+            
+        # Check if plant belongs to current user or if user is admin
+        if plant_details.get('user_name') != current_username:
+            admin_check = admin_required_old()
+            if admin_check:
+                return admin_check
+        
+        # Call the watchdog method to fetch and store plant energy data
+        result = watchdog.fetch_and_store_plant_energy_daily_generation(
+            plant_id=plant_id,
+            start_date=start_date,
+            end_date=end_date
+        )
+        
+        # If the result is a tuple with a status code, handle the error
+        if isinstance(result, tuple) and len(result) > 1:
+            return jsonify(result[0]), result[1]
+            
+        # Return the result as JSON
+        return jsonify(result)
+        
     except Exception as e:
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
@@ -574,6 +708,57 @@ def get_task_status(task_id):
         return jsonify(task_status)
     except Exception as e:
         return jsonify({'status': 'error', 'message': str(e)}), 500
+    
+@app.route('/device/history', methods=['GET'])
+@jwt_required()
+def get_device_history():
+    try:
+        # Get device_sn, plant_id, and date from request data
+        device_sn = request.args.get('device_sn')
+        plant_id = request.args.get('plant_id')
+        date = request.args.get('date')
+        
+        # Validate that at least one of device_sn or plant_id and date are provided
+        if (not device_sn and not plant_id) or not date:
+            return jsonify({'status': 'error', 'message': 'device_sn or plant_id and date parameters are required'}), 400
+        
+        # Check access based on device_sn or plant_id
+        if device_sn:
+            access_check = check_device_access(device_sn)
+            if access_check:
+                return access_check
+        elif plant_id:
+            # Get current user
+            current_username = get_jwt_identity()
+            
+            # Check if plant belongs to user or user is admin
+            plant_info = None
+            all_plants = watchdog.db_client.get_plants_list()
+            for p in all_plants:
+                if p.get('plant_id') == plant_id:
+                    plant_info = p
+                    break
+            
+            if not plant_info:
+                return jsonify({'status': 'error', 'message': f'Plant not found: {plant_id}'}), 404
+                
+            if plant_info.get('user_name') != current_username:
+                # Check if user is admin
+                admin_check = admin_required_old()
+                if admin_check:
+                    return admin_check
+        
+        # If both device_sn and plant_id are provided, use device_sn
+        records = watchdog.get_device_history_records(device_sn=device_sn, plant_id=plant_id, date_str=date)
+        return jsonify({
+            'device_sn': device_sn,
+            'plant_id': plant_id,
+            'date': date,
+            'record_count': len(records) if records else 0,
+            'records': records if records else []
+        })
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
 
 @app.route('/device/disruption_events', methods=['GET'])
 @jwt_required()
@@ -602,57 +787,6 @@ def get_device_disruption_events():
             
         # Otherwise, return the result as JSON
         return jsonify(result)
-    except Exception as e:
-        return jsonify({'status': 'error', 'message': str(e)}), 500
-    
-@app.route('/plant/summary/ingest', methods=['GET'])
-@jwt_required()
-def ingest_plant_energy_summary():
-    """Fetch plant energy summary from Growatt API and store it in the database"""
-    try:
-        # Get required plant_id parameter
-        plant_id = request.args.get('plant_id')
-        
-        # Validate the required parameter
-        if not plant_id:
-            return jsonify({
-                'status': 'error',
-                'message': 'plant_id parameter is required'
-            }), 400
-            
-        # Check if the user has access to this plant
-        current_username = get_jwt_identity()
-        
-        # Get plant details
-        plant_details = None
-        all_plants = watchdog.db_client.get_plants_list()
-        for p in all_plants:
-            if p.get('plant_id') == plant_id:
-                plant_details = p
-                break
-                
-        if not plant_details:
-            return jsonify({
-                'status': 'error',
-                'message': f'Plant not found: {plant_id}'
-            }), 404
-            
-        # Check if plant belongs to current user or if user is admin
-        if plant_details.get('user_name') != current_username:
-            admin_check = admin_required_old()
-            if admin_check:
-                return admin_check
-        
-        # Call the watchdog method to fetch and store plant summary
-        result = watchdog.fetch_and_store_plant_summary(plant_id=plant_id)
-        
-        # If the result is a tuple with a status code, handle the error
-        if isinstance(result, tuple) and len(result) > 1:
-            return jsonify(result[0]), result[1]
-            
-        # Return the result as JSON
-        return jsonify(result)
-        
     except Exception as e:
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
@@ -766,81 +900,6 @@ def get_user_profile():
     except Exception as e:
         logger.error(f"Error fetching user profile: {str(e)}")
         return jsonify({"status": "error", "message": "Failed to fetch user profile"}), 500
-
-@app.route('/users/onboard', methods=['POST'])
-@jwt_required()
-@admin_required
-def onboard_new_user():
-    """
-    Onboard a new user with plants and devices
-    
-    Required POST parameters:
-    - username: Username for the new user
-    - user_id: User ID for the new user
-    - vendor: Vendor name (e.g., 'Growatt')
-    
-    Optional POST parameters:
-    - phone: User's phone number
-    - email: User's email address
-    - password: User's password (will be hashed)
-    - role: User's role (default is 'user')
-    - bootstrap_history: Boolean indicating whether to fetch historical data (default is True)
-    """
-    try:            
-        # Get parameters from request JSON
-        request_data = request.get_json()
-        
-        if not request_data:
-            return jsonify({
-                'status': 'error',
-                'message': 'Request body is required with JSON data'
-            }), 400
-        
-        # Extract required parameters
-        username = request_data.get('username')
-        user_id = request_data.get('user_id')
-        vendor = request_data.get('vendor')
-        
-        # Validate required parameters
-        if not username:
-            return jsonify({'status': 'error', 'message': 'username parameter is required'}), 400
-        if not user_id:
-            return jsonify({'status': 'error', 'message': 'user_id parameter is required'}), 400
-        if not vendor:
-            return jsonify({'status': 'error', 'message': 'vendor parameter is required'}), 400
-        
-        # Extract optional parameters
-        phone = request_data.get('phone')
-        email = request_data.get('email')
-        password = request_data.get('password')
-        role = request_data.get('role')
-        
-        # Handle bootstrap_history parameter - convert to boolean
-        bootstrap_history = True  # Default is True
-        if 'bootstrap_history' in request_data:
-            bootstrap_param = request_data.get('bootstrap_history')
-            bootstrap_history = bootstrap_param.lower() in ('true', 'yes', '1')
-        
-        logger.info(f"User onboarding for {username} with bootstrap_history={bootstrap_history}")
-        
-        # Call the onboard_new_user method
-        result = watchdog.onboard_new_user(
-            username=username,
-            user_id=user_id,
-            vendor=vendor,
-            phone=phone,
-            email=email,
-            password=password,
-            role=role,
-            bootstrap_history=bootstrap_history
-        )
-        
-        # Return the result
-        return jsonify(result)
-        
-    except Exception as e:
-        logger.error(f"Error onboarding new user: {str(e)}")
-        return jsonify({'status': 'error', 'message': str(e)}), 500
 
 @app.route('/plants/list', methods=['GET'])
 @jwt_required()
@@ -1268,32 +1327,99 @@ def batch_analyze_inverters_disruptions():
     except Exception as e:
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
-@app.route('/dashboard', methods=['GET'])
+@app.route('/plants/energy/daily/batch-ingest', methods=['GET'])
 @jwt_required()
-def get_user_dashboard():
-    """Get dashboard data for a specific user including their plant details and summary"""
+@admin_required
+def batch_ingest_plant_energy_daily_data():
+    """Fetch and store daily energy generation data for all plants"""
     try:
-        # Get current user from JWT token
-        current_username = get_jwt_identity()
-        
-        # Get optional username parameter (for admins to view other users' dashboards)
-        username_param = request.args.get('username', current_username)
-        
-        # If requesting another user's dashboard, check admin privileges
-        if username_param != current_username:
-            admin_check = admin_required_old()
-            if admin_check:
-                return admin_check
-        
-        # Call the watchdog method to get dashboard data
-        result = watchdog.get_user_dashboard_data(username_param)
-        
-        # If the result is a tuple with a status code, handle the error
-        if isinstance(result, tuple) and len(result) > 1:
-            return jsonify(result[0]), result[1]
+        # This is an admin-only endpoint
+        # admin_check = admin_required_old() # Old call
+        # if admin_check:
+        #    return admin_check
             
-        # Return the result as JSON
-        return jsonify(result)
+        # Get optional date parameters with defaults
+        start_date = request.args.get('start_date')
+        end_date = request.args.get('end_date')
+        
+        # Get the list of all plants
+        plants = watchdog.db_client.get_plants_list()
+        
+        if not plants:
+            return jsonify({
+                'status': 'error',
+                'message': 'No plants found in the system'
+            }), 404
+        
+        # Track results for each plant
+        results = []
+        successful_plants = 0
+        failed_plants = 0
+        
+        # Process each plant
+        for plant in plants:
+            plant_id = plant.get('plant_id')
+            
+            # Skip if no plant_id
+            if not plant_id:
+                continue
+                
+            try:
+                # Fetch and store data for this plant
+                result = watchdog.fetch_and_store_plant_energy_daily_generation(
+                    plant_id=plant_id,
+                    start_date=start_date,
+                    end_date=end_date
+                )
+                
+                # Handle case where response is a tuple (error response)
+                if isinstance(result, tuple) and len(result) > 1:
+                    error_data, status_code = result
+                    # Create a standardized error result
+                    plant_result = {
+                        'plant_id': plant_id,
+                        'user_name': plant.get('user_name', ''),
+                        'status': 'error',
+                        'error': error_data.get('message', 'Unknown error'),
+                        'status_code': status_code
+                    }
+                    failed_plants += 1
+                else:
+                    # Success case
+                    plant_result = {
+                        'plant_id': plant_id,
+                        'user_name': plant.get('user_name', ''),
+                        'status': 'success',
+                        'api_data': result.get('api_result', {}),
+                        'db_result': result.get('db_result', {})
+                    }
+                    successful_plants += 1
+                
+                # Add result to results list
+                results.append(plant_result)
+                
+                # Wait for 1 second before processing the next plant to avoid API rate limits
+                time.sleep(1)
+                
+            except Exception as e:
+                # If one plant fails, continue with others but log the error
+                logger.error(f"Error processing plant {plant_id}: {str(e)}")
+                results.append({
+                    'plant_id': plant_id,
+                    'user_name': plant.get('user_name', ''),
+                    'status': 'error',
+                    'error': str(e)
+                })
+                failed_plants += 1
+        
+        # Return the aggregated results
+        return jsonify({
+            'status': 'success',
+            'total_plants': len(plants),
+            'successful_plants': successful_plants,
+            'failed_plants': failed_plants,
+            'results': results
+        })
         
     except Exception as e:
         return jsonify({'status': 'error', 'message': str(e)}), 500
@@ -1430,55 +1556,26 @@ def view_efficiency_snapshot():
             plant_hour_labels=[],
             error=str(e)
         )
-
-@app.route('/plant/energy/daily/ingest', methods=['GET'])
+    
+@app.route('/dashboard', methods=['GET'])
 @jwt_required()
-def ingest_plant_energy_daily_data():
-    """Fetch and store daily energy generation data for a plant over a date range"""
+def get_user_dashboard():
+    """Get dashboard data for a specific user including their plant details and summary"""
     try:
-        # Get required plant_id parameter
-        plant_id = request.args.get('plant_id')
-        
-        # Get optional date parameters with defaults
-        start_date = request.args.get('start_date')
-        end_date = request.args.get('end_date')
-        
-        # Validate the required parameter
-        if not plant_id:
-            return jsonify({
-                'status': 'error',
-                'message': 'plant_id parameter is required'
-            }), 400
-            
-        # Check if the user has access to this plant
+        # Get current user from JWT token
         current_username = get_jwt_identity()
         
-        # Get plant details
-        plant_details = None
-        all_plants = watchdog.db_client.get_plants_list()
-        for p in all_plants:
-            if p.get('plant_id') == plant_id:
-                plant_details = p
-                break
-                
-        if not plant_details:
-            return jsonify({
-                'status': 'error',
-                'message': f'Plant not found: {plant_id}'
-            }), 404
-            
-        # Check if plant belongs to current user or if user is admin
-        if plant_details.get('user_name') != current_username:
+        # Get optional username parameter (for admins to view other users' dashboards)
+        username_param = request.args.get('username', current_username)
+        
+        # If requesting another user's dashboard, check admin privileges
+        if username_param != current_username:
             admin_check = admin_required_old()
             if admin_check:
                 return admin_check
         
-        # Call the watchdog method to fetch and store plant energy data
-        result = watchdog.fetch_and_store_plant_energy_daily_generation(
-            plant_id=plant_id,
-            start_date=start_date,
-            end_date=end_date
-        )
+        # Call the watchdog method to get dashboard data
+        result = watchdog.get_user_dashboard_data(username_param)
         
         # If the result is a tuple with a status code, handle the error
         if isinstance(result, tuple) and len(result) > 1:
@@ -1486,103 +1583,6 @@ def ingest_plant_energy_daily_data():
             
         # Return the result as JSON
         return jsonify(result)
-        
-    except Exception as e:
-        return jsonify({'status': 'error', 'message': str(e)}), 500
-
-@app.route('/plants/energy/daily/batch-ingest', methods=['GET'])
-@jwt_required()
-@admin_required
-def batch_ingest_plant_energy_daily_data():
-    """Fetch and store daily energy generation data for all plants"""
-    try:
-        # This is an admin-only endpoint
-        # admin_check = admin_required_old() # Old call
-        # if admin_check:
-        #    return admin_check
-            
-        # Get optional date parameters with defaults
-        start_date = request.args.get('start_date')
-        end_date = request.args.get('end_date')
-        
-        # Get the list of all plants
-        plants = watchdog.db_client.get_plants_list()
-        
-        if not plants:
-            return jsonify({
-                'status': 'error',
-                'message': 'No plants found in the system'
-            }), 404
-        
-        # Track results for each plant
-        results = []
-        successful_plants = 0
-        failed_plants = 0
-        
-        # Process each plant
-        for plant in plants:
-            plant_id = plant.get('plant_id')
-            
-            # Skip if no plant_id
-            if not plant_id:
-                continue
-                
-            try:
-                # Fetch and store data for this plant
-                result = watchdog.fetch_and_store_plant_energy_daily_generation(
-                    plant_id=plant_id,
-                    start_date=start_date,
-                    end_date=end_date
-                )
-                
-                # Handle case where response is a tuple (error response)
-                if isinstance(result, tuple) and len(result) > 1:
-                    error_data, status_code = result
-                    # Create a standardized error result
-                    plant_result = {
-                        'plant_id': plant_id,
-                        'user_name': plant.get('user_name', ''),
-                        'status': 'error',
-                        'error': error_data.get('message', 'Unknown error'),
-                        'status_code': status_code
-                    }
-                    failed_plants += 1
-                else:
-                    # Success case
-                    plant_result = {
-                        'plant_id': plant_id,
-                        'user_name': plant.get('user_name', ''),
-                        'status': 'success',
-                        'api_data': result.get('api_result', {}),
-                        'db_result': result.get('db_result', {})
-                    }
-                    successful_plants += 1
-                
-                # Add result to results list
-                results.append(plant_result)
-                
-                # Wait for 1 second before processing the next plant to avoid API rate limits
-                time.sleep(1)
-                
-            except Exception as e:
-                # If one plant fails, continue with others but log the error
-                logger.error(f"Error processing plant {plant_id}: {str(e)}")
-                results.append({
-                    'plant_id': plant_id,
-                    'user_name': plant.get('user_name', ''),
-                    'status': 'error',
-                    'error': str(e)
-                })
-                failed_plants += 1
-        
-        # Return the aggregated results
-        return jsonify({
-            'status': 'success',
-            'total_plants': len(plants),
-            'successful_plants': successful_plants,
-            'failed_plants': failed_plants,
-            'results': results
-        })
         
     except Exception as e:
         return jsonify({'status': 'error', 'message': str(e)}), 500
