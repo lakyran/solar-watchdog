@@ -4,7 +4,7 @@ This WebJob runs every 10 minutes to trigger the batch analysis process for disr
 
 ## Files
 
-- `batch-analyze-disruptions.sh` - The main shell script that calls the `/devices/disruptions/batch-analyze` endpoint
+- `batch-analyze-disruptions.sh` - The main shell script that calls the `/api/devices/disruptions/batch-analyze` endpoint
 - `requirements.job.txt` - Dependencies required by the WebJob (if using Python instead of bash)
 - `settings.job` - Configuration for WebJob scheduling using CRON expression
 

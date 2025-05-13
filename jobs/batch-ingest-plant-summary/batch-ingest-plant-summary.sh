@@ -4,8 +4,8 @@
 set -e
 
 # Set variables
-ENDPOINT="https://unisolartech-watchdog-databox-bgdqfzedhnd5ecbt.centralindia-01.azurewebsites.net/plants/summary/batch-ingest"
-LOGIN_ENDPOINT="https://unisolartech-watchdog-databox-bgdqfzedhnd5ecbt.centralindia-01.azurewebsites.net/login"
+ENDPOINT="https://unisolartech-watchdog-databox-bgdqfzedhnd5ecbt.centralindia-01.azurewebsites.net/api/plants/summary/batch-ingest"
+LOGIN_ENDPOINT="https://unisolartech-watchdog-databox-bgdqfzedhnd5ecbt.centralindia-01.azurewebsites.net/api/auth/login"
 ADMIN_USER="admin"
 ADMIN_PASS="admin"
 TIMEOUT=600

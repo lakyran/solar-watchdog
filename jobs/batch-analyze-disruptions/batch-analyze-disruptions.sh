@@ -4,8 +4,8 @@
 set -e
 
 # Set variables
-ENDPOINT="unisolartech-watchdog-databox-bgdqfzedhnd5ecbt.centralindia-01.azurewebsites.net/devices/disruptions/batch-analyze"
-LOGIN_ENDPOINT="https://unisolartech-watchdog-databox-bgdqfzedhnd5ecbt.centralindia-01.azurewebsites.net/login"
+ENDPOINT="https://unisolartech-watchdog-databox-bgdqfzedhnd5ecbt.centralindia-01.azurewebsites.net/api/devices/disruptions/batch-analyze"
+LOGIN_ENDPOINT="https://unisolartech-watchdog-databox-bgdqfzedhnd5ecbt.centralindia-01.azurewebsites.net/api/auth/login"
 ADMIN_USER="admin"
 ADMIN_PASS="admin"
 TIMEOUT=3600  # 1 hour timeout for batch analysis which can take longer

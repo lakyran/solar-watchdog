@@ -4,14 +4,14 @@ This WebJob runs every 6 minutes to trigger the batch ingest process for all inv
 
 ## Files
 
-- `run.py` - The main Python script that calls the `/history/batch-ingest` endpoint
+- `batch-ingest-history.sh` - The main shell script that calls the `/api/devices/history/batch-ingest` endpoint
 - `requirements.job.txt` - Dependencies required by the WebJob
 - `settings.job` - Configuration for WebJob scheduling using CRON expression
 
 ## Deployment Instructions
 
 1. Create a ZIP file containing:
-   - `run.py`
+   - `batch-ingest-history.sh`
    - `requirements.job.txt` (rename to `requirements.txt` in the ZIP)
    - `settings.job`
 

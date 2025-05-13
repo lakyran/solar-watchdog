@@ -4,7 +4,7 @@ This WebJob runs every 6 minutes to trigger the batch ingest process for all pla
 
 ## Files
 
-- `batch-ingest-plant-summary.sh` - The main shell script that calls the `/plants/summary/batch-ingest` endpoint
+- `batch-ingest-plant-summary.sh` - The main shell script that calls the `/api/plants/summary/batch-ingest` endpoint
 - `requirements.job.txt` - Dependencies required by the WebJob
 - `settings.job` - Configuration for WebJob scheduling using CRON expression
 
@@ -38,7 +38,7 @@ The WebJob is configured to run every 6 minutes using the CRON expression: `0 */
 ## What This Job Does
 
 This job:
-1. Calls the `/plants/summary/batch-ingest` endpoint
+1. Calls the `/api/plants/summary/batch-ingest` endpoint
 2. Retrieves the latest energy summary data for all plants from the Growatt API
 3. Updates the plant_energy_summary table in the database with the latest values
 
