@@ -45,6 +45,7 @@ def login():
         is_authenticated, user, error_message = watchdog.user_service.authenticate_user(username, password)
         
         if not is_authenticated:
+            logger.info(f"Invalid username or password for user: {username}")
             return jsonify({"status": "error", "message": error_message}), 401
         
         # Create access token and refresh token

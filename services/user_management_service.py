@@ -79,10 +79,12 @@ class UserManagementService(BaseService):
             
             # Check if user exists
             if not user:
+                self.logger.info(f"User {username} not found")
                 return False, None, "Invalid username or password"
             
             # Check password
             if not user.get('password_hash') or not check_password_hash(user.get('password_hash'), password):
+                self.logger.info(f"Invalid username or password for user: {username}")
                 return False, None, "Invalid username or password"
             
             # Authentication successful
