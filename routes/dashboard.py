@@ -28,9 +28,9 @@ def get_user_dashboard():
         
         # If requesting another user's dashboard, check admin privileges
         if username_param != current_username:
-            # Check if user is admin
-            current_user = watchdog.db_client.get_user(current_username)
-            if not current_user or current_user.get('role') != 'admin':
+            # Check if user is admin using the user service
+            is_admin = watchdog.user_service.check_admin_role(current_username)
+            if not is_admin:
                 return jsonify({
                     'status': 'error',
                     'message': 'Unauthorized: Admin privileges required'

@@ -41,16 +41,11 @@ def login():
         if not password:
             return jsonify({"status": "error", "message": "Password is required"}), 400
         
-        # Get user from database
-        user = watchdog.db_client.get_user(username)
+        # Authenticate user using the user service
+        is_authenticated, user, error_message = watchdog.user_service.authenticate_user(username, password)
         
-        # Check if user exists
-        if not user:
-            return jsonify({"status": "error", "message": "Invalid username or password"}), 401
-        
-        # Check password
-        if not user.get('password_hash') or not check_password_hash(user.get('password_hash'), password):
-            return jsonify({"status": "error", "message": "Invalid username or password"}), 401
+        if not is_authenticated:
+            return jsonify({"status": "error", "message": error_message}), 401
         
         # Create access token and refresh token
         additional_claims = {

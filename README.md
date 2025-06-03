@@ -20,11 +20,23 @@ The solar monitoring system consists of several core components:
 
 ### Components
 1. **Flask Web Application** (`app.py`) - Provides HTTP endpoints for various functions
-2. **Watchdog Service** (`watchdog.py`) - Core business logic implementation
-3. **Growatt API Client** (`growatt.py`) - Handles communication with the Growatt solar monitoring API
-4. **Azure Database Client** (`azure_db.py`) - Manages PostgreSQL database interactions
-5. **AI Analysis Agent** (`ai_agent.py`) - Analyzes solar generation data for disruptions
-6. **Automated WebJobs** - Scheduled tasks for batch operations (located in the `jobs/` directory)
+2. **Watchdog Service** (`watchdog.py`) - Core business logic orchestration
+3. **Service Layer** (`services/`) - Modular business logic implementation
+4. **Growatt API Client** (`growatt.py`) - Handles communication with the Growatt solar monitoring API
+5. **Azure Database Client** (`azure_db.py`) - Manages PostgreSQL database interactions
+6. **AI Analysis Agent** (`ai_agent.py`) - Analyzes solar generation data for disruptions
+7. **Automated WebJobs** - Scheduled tasks for batch operations (located in the `jobs/` directory)
+
+### Service Layer
+
+The system implements a service-oriented architecture with specialized service classes:
+
+1. **HistoryIngestionService** - Handles fetching and storing generation history data
+2. **DisruptionAnalysisService** - Analyzes generation data to identify and store disruption events
+3. **UserManagementService** - Manages user onboarding and user-related operations
+4. **PlantManagementService** - Handles plant-specific operations and data collection
+
+Each service encapsulates related business logic and database operations, promoting separation of concerns and maintainability.
 
 ### Key Features
 
@@ -43,12 +55,14 @@ The solar monitoring system consists of several core components:
 - Detection of anomalies and potential issues in solar system performance
 - Storage of disruption events with detailed analysis
 - Date range analysis capabilities for historical data
+- Background task support for long-running analyses
 
 #### Monitoring and Reporting
 - Dashboard functionality to view plant summaries and performance
 - Current power output monitoring
 - Plant energy summaries (daily, monthly, yearly, total generation)
 - Carbon offset tracking
+- Efficiency snapshot data for comparing plant performance
 
 #### Scheduled Operations
 - Automated WebJobs for recurring tasks:
@@ -70,7 +84,7 @@ The system uses a PostgreSQL database with several tables:
 ### Technical Design
 
 The system follows a well-structured design pattern:
-- Clear separation of concerns between API, data access, and business logic
+- Service-oriented architecture with clear separation of concerns
 - Robust error handling and logging throughout
 - Background task support for long-running operations
 - Timezone handling for data consistency (IST standardization)
@@ -80,6 +94,11 @@ The system follows a well-structured design pattern:
 ### Recent Enhancements
 
 Several valuable features were recently added to the system:
+
+#### Service-Oriented Architecture
+- Restructured codebase with specialized service classes for better code organization
+- Improved maintainability and testability with clear separation of concerns
+- Centralized dependencies and consistent interface patterns
 
 #### Automated WebJobs for Continuous Monitoring
 - **Batch Ingest Plant Summary** - Runs every 6 minutes to fetch and store the latest energy summaries for all plants
@@ -101,6 +120,7 @@ Several valuable features were recently added to the system:
 - Improved date handling to start analysis from the first available record when no start date is provided
 - Better tracking of analysis history through the analysis ledger
 - More accurate detection of ongoing disruptions
+- Background task management for long-running analyses
 
 ## Installation
 
@@ -248,98 +268,91 @@ The system includes several WebJobs for automated tasks:
   - `date`: Date in YYYY-MM-DD format (optional)
 - **Description**: Retrieves stored disruption events for a device.
 
-#### View Device Disruption Events (HTML)
-- **Route**: `/device/disruptions/view`
-- **Method**: GET
-- **Query Parameters**:
-  - `device_sn`: Device serial number (required)
-  - `date`: Date in YYYY-MM-DD format (optional)
-- **Description**: Displays disruption events in a human-readable HTML format.
-
-### Inverter Management
-
-#### Get Inverters List
-- **Route**: `/inverters/list`
-- **Method**: GET
-- **Description**: Gets a list of all inverters in the database.
-
-### Batch Operations
-
-#### Batch Ingest History
-- **Route**: `/devices/history/batch-ingest`
-- **Method**: GET
-- **Query Parameters**:
-  - `date`: Date in YYYY-MM-DD format (optional)
-  - `overwrite`: Whether to overwrite existing records (optional, default: false)
-  - `store_records`: Whether to store the fetched records (optional, default: true)
-- **Description**: Ingests generation history for all inverters.
-
-#### Batch Analyze Disruptions
-- **Route**: `/devices/disruptions/batch-analyze`
-- **Method**: GET
-- **Query Parameters**:
-  - `start_date`: Start date in YYYY-MM-DD format (optional)
-  - `end_date`: End date in YYYY-MM-DD format (optional, defaults to today)
-  - `overwrite`: Whether to overwrite existing analysis (optional, default: true)
-- **Description**: Analyzes disruptions for all inverters, processing each sequentially.
-
 ### User Management
 
 #### Onboard New User
 - **Route**: `/users/onboard`
 - **Method**: POST
-- **Request Body** (JSON):
+- **Request Body**:
   - `username`: Username for the new user (required)
-  - `user_id`: User ID for the new user (required)
-  - `vendor`: Vendor name (e.g., 'Growatt') (required)
-  - `phone`: User's phone number (optional)
-  - `email`: User's email address (optional)
-- **Description**: Comprehensive onboarding process that:
-  1. Inserts user into database
-  2. Fetches plants from vendor API
-  3. Inserts plants into database
-  4. Fetches devices for each plant
-  5. Filters for inverters (type 1 or 7) and inserts them
+  - `user_id`: User ID from Growatt (required)
+  - `vendor`: Vendor name (required)
+  - `phone`: Phone number (optional)
+  - `email`: Email address (optional)
+  - `password`: Password (optional)
+  - `role`: User role (optional)
+  - `bootstrap_history`: Whether to bootstrap history (optional, default: true)
+- **Description**: Onboards a new user with their plants and devices.
 
-#### Get Users List
-- **Route**: `/users/list`
-- **Method**: GET
-- **Description**: Gets a list of all users in the system.
-
-#### Get Plants List
-- **Route**: `/plants/list`
+#### Get User Dashboard Data
+- **Route**: `/users/dashboard`
 - **Method**: GET
 - **Query Parameters**:
-  - `username`: Filter plants by username (optional)
-- **Description**: Gets a list of all plants, optionally filtered by username.
+  - `username`: Username (required)
+- **Description**: Gets dashboard data for a user.
 
-#### Get User Dashboard
-- **Route**: `/dashboard`
+#### Get Current Power for User
+- **Route**: `/users/current-power`
 - **Method**: GET
 - **Query Parameters**:
-  - `username`: Username to get dashboard for (required)
-- **Description**: Gets dashboard data for a specific user including plant details and summary.
+  - `username`: Username (required)
+  - `plant_id`: Plant ID (optional)
+- **Description**: Gets current power output for a user's plants.
 
-### Plant Energy Summary
+### Plant Management
 
-#### Get Plant Summary
-- **Route**: `/plant/summary`
+#### Fetch and Store Plant Summary
+- **Route**: `/plants/summary`
 - **Method**: GET
 - **Query Parameters**:
-  - `plant_id`: Plant ID to get summary for (required)
-- **Description**: Gets the energy summary for a specific plant.
+  - `plant_id`: Plant ID (required)
+- **Description**: Fetches and stores plant summary data.
 
-#### Ingest Plant Summary
-- **Route**: `/plant/summary/ingest`
+#### Fetch and Store Plant Energy Daily Generation
+- **Route**: `/plants/energy/daily`
 - **Method**: GET
 - **Query Parameters**:
-  - `plant_id`: Plant ID to fetch and store summary for (required)
-- **Description**: Fetches plant energy summary from Growatt API and stores it in the database.
+  - `plant_id`: Plant ID (required)
+  - `start_date`: Start date in YYYY-MM-DD format (optional)
+  - `end_date`: End date in YYYY-MM-DD format (optional)
+- **Description**: Fetches and stores plant energy daily generation data.
 
-#### Batch Ingest Plants Summary
-- **Route**: `/plants/summary/batch-ingest`
+#### Get Efficiency Snapshot Data
+- **Route**: `/plants/efficiency/snapshot`
 - **Method**: GET
-- **Description**: Fetches and stores energy summaries for all plants in the system.
+- **Query Parameters**:
+  - `min_eff`: Minimum efficiency (optional, default: 0)
+  - `max_eff`: Maximum efficiency (optional, default: 100)
+  - `plant_name_selected`: Selected plant name (optional)
+- **Description**: Gets efficiency snapshot data for plants.
+
+## Service Architecture
+
+The service layer is organized as follows:
+
+### BaseService
+- Common functionality for all services
+- Shared resources like logging, database connections, and API clients
+
+### HistoryIngestionService
+- Manages the ingestion of generation history data
+- Handles fetching, processing, and storing of device generation records
+- Supports bootstrapping history for new users
+
+### DisruptionAnalysisService
+- Analyzes generation data to identify disruptions
+- Manages background task execution for long-running analyses
+- Tracks analysis history in the analysis ledger
+
+### UserManagementService
+- Handles user onboarding and management
+- Manages user dashboard data and current power information
+- Links users to their plants and devices
+
+### PlantManagementService
+- Manages plant-specific operations
+- Handles plant summary and energy generation data
+- Provides efficiency analysis and comparison
 
 ## Timezone Handling
 

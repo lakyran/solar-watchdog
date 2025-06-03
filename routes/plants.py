@@ -29,9 +29,9 @@ def get_plants_list():
         
         # If a specific username is requested and it's not the current user, check admin privileges
         if username_param and username_param != current_username:
-            # Check if user is admin
-            current_user = watchdog.db_client.get_user(current_username)
-            if not current_user or current_user.get('role') != 'admin':
+            # Check if user is admin using the user service
+            is_admin = watchdog.user_service.check_admin_role(current_username)
+            if not is_admin:
                 return jsonify({
                     'status': 'error',
                     'message': 'Unauthorized: Admin privileges required'
@@ -39,15 +39,15 @@ def get_plants_list():
         
         # If no username is specified, check if user is admin
         if not username_param:
-            # Get current user
-            current_user = watchdog.db_client.get_user(current_username)
+            # Check if user is admin using the user service
+            is_admin = watchdog.user_service.check_admin_role(current_username)
             
             # If not admin, use their own username
-            if not current_user or current_user.get('role') != 'admin':
+            if not is_admin:
                 username_param = current_username
         
-        # Get the list of plants from the database
-        plants = watchdog.db_client.get_plants_list(username_param)
+        # Get the list of plants using the plant service
+        plants = watchdog.plant_service.get_plants_list(username_param)
         
         # Return the list as JSON
         return jsonify({
@@ -77,9 +77,9 @@ def get_plant_summary():
         # Check if user has access to this plant
         current_username = get_jwt_identity()
         
-        # Get plant details
+        # Get plant details using the plant service
         plant_details = None
-        all_plants = watchdog.db_client.get_plants_list()
+        all_plants = watchdog.plant_service.get_plants_list()
         for p in all_plants:
             if p.get('plant_id') == plant_id:
                 plant_details = p
@@ -93,16 +93,16 @@ def get_plant_summary():
             
         # Check if plant belongs to current user or if user is admin
         if plant_details.get('user_name') != current_username:
-            # Check if user is admin
-            current_user = watchdog.db_client.get_user(current_username)
-            if not current_user or current_user.get('role') != 'admin':
+            # Check if user is admin using the user service
+            is_admin = watchdog.user_service.check_admin_role(current_username)
+            if not is_admin:
                 return jsonify({
                     'status': 'error',
                     'message': 'Unauthorized: Admin privileges required or not owner of the plant'
                 }), 403
         
-        # Get the plant energy summary from the database
-        summary = watchdog.db_client.get_plant_energy_summary(plant_id)
+        # Get the plant energy summary using the plant service
+        summary = watchdog.plant_service.get_plant_energy_summary(plant_id)
         
         # Check if summary was found
         if not summary:
@@ -138,9 +138,9 @@ def ingest_plant_energy_summary():
         # Check if the user has access to this plant
         current_username = get_jwt_identity()
         
-        # Get plant details
+        # Get plant details using the plant service
         plant_details = None
-        all_plants = watchdog.db_client.get_plants_list()
+        all_plants = watchdog.plant_service.get_plants_list()
         for p in all_plants:
             if p.get('plant_id') == plant_id:
                 plant_details = p
@@ -154,9 +154,9 @@ def ingest_plant_energy_summary():
             
         # Check if plant belongs to current user or if user is admin
         if plant_details.get('user_name') != current_username:
-            # Check if user is admin
-            current_user = watchdog.db_client.get_user(current_username)
-            if not current_user or current_user.get('role') != 'admin':
+            # Check if user is admin using the user service
+            is_admin = watchdog.user_service.check_admin_role(current_username)
+            if not is_admin:
                 return jsonify({
                     'status': 'error',
                     'message': 'Unauthorized: Admin privileges required or not owner of the plant'
@@ -197,9 +197,9 @@ def ingest_plant_energy_daily_data():
         # Check if the user has access to this plant
         current_username = get_jwt_identity()
         
-        # Get plant details
+        # Get plant details using the plant service
         plant_details = None
-        all_plants = watchdog.db_client.get_plants_list()
+        all_plants = watchdog.plant_service.get_plants_list()
         for p in all_plants:
             if p.get('plant_id') == plant_id:
                 plant_details = p
@@ -213,15 +213,15 @@ def ingest_plant_energy_daily_data():
             
         # Check if plant belongs to current user or if user is admin
         if plant_details.get('user_name') != current_username:
-            # Check if user is admin
-            current_user = watchdog.db_client.get_user(current_username)
-            if not current_user or current_user.get('role') != 'admin':
+            # Check if user is admin using the user service
+            is_admin = watchdog.user_service.check_admin_role(current_username)
+            if not is_admin:
                 return jsonify({
                     'status': 'error',
                     'message': 'Unauthorized: Admin privileges required or not owner of the plant'
                 }), 403
         
-        # Call the watchdog method to fetch and store plant energy data
+        # Call the watchdog method to fetch and store plant energy daily generation
         result = watchdog.fetch_and_store_plant_energy_daily_generation(
             plant_id=plant_id,
             start_date=start_date,
@@ -244,79 +244,88 @@ def ingest_plant_energy_daily_data():
 def batch_ingest_plants_summary():
     """Fetch and store energy summaries for all plants in the system"""
     try:
-        # Get the list of all plants
-        plants = watchdog.db_client.get_plants_list()
+        # Get all plants using the plant service
+        plants = watchdog.plant_service.get_plants_list()
         
         if not plants:
-            return jsonify({
-                'status': 'error',
-                'message': 'No plants found in the system'
-            }), 404
-        
-        # Track results for each plant
-        results = []
-        successful_plants = 0
-        failed_plants = 0
+            return jsonify({'status': 'error', 'message': 'No plants found in the system'}), 404
+            
+        # Initialize statistics
+        stats = {
+            'total': len(plants),
+            'processed': 0,
+            'successful': 0,
+            'failed': 0,
+            'plants': []
+        }
         
         # Process each plant
+        start_time = time.time()
+        
         for plant in plants:
             plant_id = plant.get('plant_id')
+            plant_name = plant.get('plant_name', 'Unknown')
             
-            # Skip if no plant_id
             if not plant_id:
+                logger.warning(f"Skipping plant with no ID: {plant}")
+                stats['failed'] += 1
+                stats['plants'].append({
+                    'plant_id': 'unknown',
+                    'plant_name': plant_name,
+                    'status': 'skipped',
+                    'message': 'No plant_id found'
+                })
                 continue
                 
             try:
-                # Fetch and store summary for this plant
+                logger.info(f"Processing plant {plant_name} (ID: {plant_id})")
+                
+                # Call the watchdog method to fetch and store plant summary
                 result = watchdog.fetch_and_store_plant_summary(plant_id)
                 
-                # Handle case where response is a tuple (error response)
-                if isinstance(result, tuple) and len(result) > 1:
-                    error_data, status_code = result
-                    # Create a standardized error result
-                    plant_result = {
+                # Increment counters and collect stats
+                stats['processed'] += 1
+                
+                if isinstance(result, tuple) or result.get('status') != 'success':
+                    stats['failed'] += 1
+                    error_msg = result[0].get('message') if isinstance(result, tuple) else result.get('message', 'Unknown error')
+                    stats['plants'].append({
                         'plant_id': plant_id,
-                        'user_name': plant.get('user_name', ''),
-                        'status': 'error',
-                        'error': error_data.get('message', 'Unknown error'),
-                        'status_code': status_code
-                    }
-                    failed_plants += 1
+                        'plant_name': plant_name,
+                        'status': 'failed',
+                        'message': error_msg
+                    })
                 else:
-                    # Success case
-                    plant_result = {
+                    stats['successful'] += 1
+                    stats['plants'].append({
                         'plant_id': plant_id,
-                        'user_name': plant.get('user_name', ''),
-                        'status': 'success',
-                        'api_data': result.get('api_data'),
-                        'db_result': result.get('db_result')
-                    }
-                    successful_plants += 1
+                        'plant_name': plant_name,
+                        'status': 'success'
+                    })
                 
-                # Add result to results list
-                results.append(plant_result)
-                
-                # Wait for 1 second before processing the next plant to avoid API rate limits
+                # Add a small delay to avoid overwhelming the API
                 time.sleep(1)
                 
             except Exception as e:
-                # If one plant fails, continue with others but log the error
-                logger.error(f"Error processing plant {plant_id}: {str(e)}")
-                results.append({
+                logger.error(f"Error processing plant {plant_name} (ID: {plant_id}): {str(e)}")
+                stats['failed'] += 1
+                stats['processed'] += 1
+                stats['plants'].append({
                     'plant_id': plant_id,
-                    'user_name': plant.get('user_name', ''),
+                    'plant_name': plant_name,
                     'status': 'error',
-                    'error': str(e)
+                    'message': str(e)
                 })
-                failed_plants += 1
         
-        # Return the aggregated results
+        # Calculate processing time
+        elapsed_time = time.time() - start_time
+        stats['elapsed_time'] = elapsed_time
+        
+        # Return the statistics
         return jsonify({
             'status': 'success',
-            'total_plants': len(plants),
-            'successful_plants': successful_plants,
-            'failed_plants': failed_plants,
-            'results': results
+            'message': f'Batch ingest completed. Processed {stats["processed"]} plants ({stats["successful"]} successful, {stats["failed"]} failed) in {elapsed_time:.2f} seconds',
+            'stats': stats
         })
         
     except Exception as e:
@@ -326,89 +335,98 @@ def batch_ingest_plants_summary():
 @jwt_required()
 @admin_required
 def batch_ingest_plant_energy_daily_data():
-    """Fetch and store daily energy generation data for all plants"""
+    """Fetch and store daily energy generation data for all plants over a date range"""
     try:
         # Get optional date parameters with defaults
         start_date = request.args.get('start_date')
         end_date = request.args.get('end_date')
         
-        # Get the list of all plants
-        plants = watchdog.db_client.get_plants_list()
+        # Get all plants using the plant service
+        plants = watchdog.plant_service.get_plants_list()
         
         if not plants:
-            return jsonify({
-                'status': 'error',
-                'message': 'No plants found in the system'
-            }), 404
-        
-        # Track results for each plant
-        results = []
-        successful_plants = 0
-        failed_plants = 0
+            return jsonify({'status': 'error', 'message': 'No plants found in the system'}), 404
+            
+        # Initialize statistics
+        stats = {
+            'total': len(plants),
+            'processed': 0,
+            'successful': 0,
+            'failed': 0,
+            'plants': []
+        }
         
         # Process each plant
+        start_time = time.time()
+        
         for plant in plants:
             plant_id = plant.get('plant_id')
+            plant_name = plant.get('plant_name', 'Unknown')
             
-            # Skip if no plant_id
             if not plant_id:
+                logger.warning(f"Skipping plant with no ID: {plant}")
+                stats['failed'] += 1
+                stats['plants'].append({
+                    'plant_id': 'unknown',
+                    'plant_name': plant_name,
+                    'status': 'skipped',
+                    'message': 'No plant_id found'
+                })
                 continue
                 
             try:
-                # Fetch and store data for this plant
+                logger.info(f"Processing plant {plant_name} (ID: {plant_id})")
+                
+                # Call the watchdog method to fetch and store plant energy daily generation
                 result = watchdog.fetch_and_store_plant_energy_daily_generation(
                     plant_id=plant_id,
                     start_date=start_date,
                     end_date=end_date
                 )
                 
-                # Handle case where response is a tuple (error response)
-                if isinstance(result, tuple) and len(result) > 1:
-                    error_data, status_code = result
-                    # Create a standardized error result
-                    plant_result = {
+                # Increment counters and collect stats
+                stats['processed'] += 1
+                
+                if isinstance(result, tuple) or result.get('status') != 'success':
+                    stats['failed'] += 1
+                    error_msg = result[0].get('message') if isinstance(result, tuple) else result.get('message', 'Unknown error')
+                    stats['plants'].append({
                         'plant_id': plant_id,
-                        'user_name': plant.get('user_name', ''),
-                        'status': 'error',
-                        'error': error_data.get('message', 'Unknown error'),
-                        'status_code': status_code
-                    }
-                    failed_plants += 1
+                        'plant_name': plant_name,
+                        'status': 'failed',
+                        'message': error_msg
+                    })
                 else:
-                    # Success case
-                    plant_result = {
+                    stats['successful'] += 1
+                    stats['plants'].append({
                         'plant_id': plant_id,
-                        'user_name': plant.get('user_name', ''),
-                        'status': 'success',
-                        'api_data': result.get('api_result', {}),
-                        'db_result': result.get('db_result', {})
-                    }
-                    successful_plants += 1
+                        'plant_name': plant_name,
+                        'status': 'success'
+                    })
                 
-                # Add result to results list
-                results.append(plant_result)
-                
-                # Wait for 1 second before processing the next plant to avoid API rate limits
+                # Add a small delay to avoid overwhelming the API
                 time.sleep(1)
                 
             except Exception as e:
-                # If one plant fails, continue with others but log the error
-                logger.error(f"Error processing plant {plant_id}: {str(e)}")
-                results.append({
+                logger.error(f"Error processing plant {plant_name} (ID: {plant_id}): {str(e)}")
+                stats['failed'] += 1
+                stats['processed'] += 1
+                stats['plants'].append({
                     'plant_id': plant_id,
-                    'user_name': plant.get('user_name', ''),
+                    'plant_name': plant_name,
                     'status': 'error',
-                    'error': str(e)
+                    'message': str(e)
                 })
-                failed_plants += 1
         
-        # Return the aggregated results
+        # Calculate processing time
+        elapsed_time = time.time() - start_time
+        stats['elapsed_time'] = elapsed_time
+        
+        # Return the statistics
         return jsonify({
             'status': 'success',
-            'total_plants': len(plants),
-            'successful_plants': successful_plants,
-            'failed_plants': failed_plants,
-            'results': results
+            'message': f'Batch ingest completed. Processed {stats["processed"]} plants ({stats["successful"]} successful, {stats["failed"]} failed) in {elapsed_time:.2f} seconds',
+            'stats': stats
         })
         
     except Exception as e:

@@ -26,9 +26,10 @@ def admin_required(fn):
                 'message': 'Authentication required'
             }), 401
 
-        current_user_data = watchdog.db_client.get_user(current_username)
+        # Use the user service to check admin role
+        is_admin = watchdog.user_service.check_admin_role(current_username)
         
-        if not current_user_data or current_user_data.get('role') != 'admin':
+        if not is_admin:
             return jsonify({
                 'status': 'error',
                 'message': 'Unauthorized: Admin privileges required'
@@ -42,8 +43,8 @@ def admin_required(fn):
 def get_users_list():
     """Get a list of all users in the system"""
     try:
-        # Get the list of users from the database
-        users = watchdog.db_client.get_users_list()
+        # Get the list of users using the user service
+        users = watchdog.user_service.get_users_list()
         
         # Return the list as JSON
         return jsonify({
@@ -67,8 +68,8 @@ def get_user_profile():
         # Get current user identity from JWT token
         current_username = get_jwt_identity()
         
-        # Get user from database
-        user = watchdog.db_client.get_user(current_username)
+        # Get user from database using the user service
+        user = watchdog.user_service.get_user(current_username)
         
         # Check if user exists
         if not user:

@@ -30,8 +30,8 @@ def check_device_access(device_sn):
     # Get current user identity from JWT token
     current_username = get_jwt_identity()
     
-    # Get the device metadata
-    device_metadata = watchdog.db_client.get_inverter_record(device_sn)
+    # Get the device metadata using the plant service
+    device_metadata = watchdog.plant_service.get_inverter_record(device_sn)
     
     # If device doesn't exist, return error
     if not device_metadata:
@@ -44,9 +44,9 @@ def check_device_access(device_sn):
     if device_metadata.get('user_name') == current_username:
         return None
         
-    # Check if user is admin
-    current_user = watchdog.db_client.get_user(current_username)
-    if current_user and current_user.get('role') == 'admin':
+    # Check if user is admin using the user service
+    is_admin = watchdog.user_service.check_admin_role(current_username)
+    if is_admin:
         return None
         
     # If we get here, user doesn't have access
@@ -68,9 +68,9 @@ def get_inverters_list():
         
         # If a specific username is requested and it's not the current user, check admin privileges
         if username_param and username_param != current_username:
-            # Check if user is admin
-            current_user = watchdog.db_client.get_user(current_username)
-            if not current_user or current_user.get('role') != 'admin':
+            # Check if user is admin using the user service
+            is_admin = watchdog.user_service.check_admin_role(current_username)
+            if not is_admin:
                 return jsonify({
                     'status': 'error',
                     'message': 'Unauthorized: Admin privileges required'
@@ -78,18 +78,18 @@ def get_inverters_list():
         
         # If no username is specified, check if user is admin
         if not username_param:
-            # Get current user
-            current_user = watchdog.db_client.get_user(current_username)
+            # Check if user is admin using the user service
+            is_admin = watchdog.user_service.check_admin_role(current_username)
             
             # If not admin, use their own username
-            if not current_user or current_user.get('role') != 'admin':
+            if not is_admin:
                 username_param = current_username
         
-        # Get the list of inverters from the database
-        inverters = watchdog.db_client.get_inverters_list(username_param)
+        # Get the list of inverters using the plant service
+        inverters = watchdog.plant_service.get_inverters_list(username_param)
         
-        # Get the list of plants (will be filtered by username if provided)
-        plants = watchdog.db_client.get_plants_list(username_param)
+        # Get the list of plants using the plant service
+        plants = watchdog.plant_service.get_plants_list(username_param)
         
         # Create a dictionary of plants by plant_id for easy lookup
         plants_dict = {plant['plant_id']: plant for plant in plants}
@@ -133,8 +133,8 @@ def test_growatt_device_history():
         if access_check:
             return access_check
             
-        # Get device metadata from inverter records
-        inverter_metadata = watchdog.db_client.get_inverter_record(device_sn)
+        # Get device metadata from inverter records using the plant service
+        inverter_metadata = watchdog.plant_service.get_inverter_record(device_sn)
         
         # Check if inverter record exists
         if not inverter_metadata:

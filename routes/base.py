@@ -34,10 +34,10 @@ def view_device_disruption_events():
         device_sn = request.args.get('device_sn')
         date_str = request.args.get('date', None)
         
-        # Get the list of inverters and plants
+        # Get the list of inverters and plants using the plant service
         try:
-            inverters = watchdog.db_client.get_inverters_list()
-            plants = watchdog.db_client.get_plants_list()
+            inverters = watchdog.plant_service.get_inverters_list()
+            plants = watchdog.plant_service.get_plants_list()
             plants_dict = {plant['plant_id']: plant for plant in plants}
             # Augment inverters with plant details
             for inverter in inverters:
