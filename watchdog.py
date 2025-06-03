@@ -15,6 +15,16 @@ from services import (
     PlantManagementService
 )
 
+# Import monitoring decorators (OpenTelemetry only)
+from monitoring import (
+    instrument_history_service,
+    instrument_disruption_service,
+    instrument_user_service,
+    instrument_plant_service,
+    instrument_db_client,
+    instrument_api_client
+)
+
 class Watchdog:
     # Task status constants
     TASK_STATUS = {
@@ -28,11 +38,11 @@ class Watchdog:
         self.app = app
         self.logger = logging.getLogger(__name__)
         
-        # Initialize Growatt API client
-        self.growatt_client = GrowattAPI()
+        # Initialize Growatt API client with OpenTelemetry instrumentation
+        self.growatt_client = instrument_api_client(GrowattAPI)()
         
-        # Initialize Azure DB client
-        self.db_client = AzureDB()
+        # Initialize Azure DB client with OpenTelemetry instrumentation
+        self.db_client = instrument_db_client(AzureDB)()
 
         # Initialize AI agent
         self.ai_agent = GrowattAIAgent()
@@ -40,26 +50,26 @@ class Watchdog:
         # Define the IST timezone
         self.ist_timezone = pytz.timezone('Asia/Kolkata')
         
-        # Initialize service objects
-        self.history_service = HistoryIngestionService(
+        # Initialize service objects with OpenTelemetry monitoring
+        self.history_service = instrument_history_service(HistoryIngestionService)(
             db_client=self.db_client,
             growatt_client=self.growatt_client,
             ai_agent=self.ai_agent
         )
         
-        self.disruption_service = DisruptionAnalysisService(
+        self.disruption_service = instrument_disruption_service(DisruptionAnalysisService)(
             db_client=self.db_client,
             growatt_client=self.growatt_client,
             ai_agent=self.ai_agent
         )
         
-        self.user_service = UserManagementService(
+        self.user_service = instrument_user_service(UserManagementService)(
             db_client=self.db_client,
             growatt_client=self.growatt_client,
             ai_agent=self.ai_agent
         )
         
-        self.plant_service = PlantManagementService(
+        self.plant_service = instrument_plant_service(PlantManagementService)(
             db_client=self.db_client,
             growatt_client=self.growatt_client,
             ai_agent=self.ai_agent

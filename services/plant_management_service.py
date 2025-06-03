@@ -69,7 +69,16 @@ class PlantManagementService(BaseService):
             else:
                 self.logger.info("Getting list of all inverters")
                 
-            return self.db_client.get_inverters_list(username, plant_id)
+            # Get the base list of inverters by username from the database
+            # Note: AzureDB.get_inverters_list only accepts username parameter
+            inverters = self.db_client.get_inverters_list(username)
+            
+            # If plant_id is specified, filter the results in memory
+            if plant_id:
+                self.logger.info(f"Filtering inverters by plant_id: {plant_id}")
+                inverters = [inv for inv in inverters if inv.get('plant_id') == plant_id]
+            
+            return inverters
         except Exception as e:
             error_msg = f"Error getting inverters list: {str(e)}"
             self.logger.error(error_msg)

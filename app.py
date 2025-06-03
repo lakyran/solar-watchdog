@@ -19,13 +19,16 @@ from routes.dashboard import dashboard_bp
 from routes.tasks import tasks_bp
 from routes.base import base_bp
 
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - [%(filename)s:%(lineno)d] - %(message)s',
-    datefmt='%Y-%m-%d %H:%M:%S'
-)
-logger = logging.getLogger(__name__)
+# Import monitoring
+from monitoring.config import init_opentelemetry
+from monitoring.route_monitor import instrument_blueprint, RequestMonitoringMiddleware
+from monitoring.metrics import init_metrics
+from azure_db import AzureDB
+from growatt import GrowattAPI
+from logging_config import configure_logging
+
+# Configure logging using centralized config
+logger = configure_logging(verbose=False)
 logger.info("Starting Unisolar Watchdog Service")
 
 # Load environment variables
@@ -39,6 +42,21 @@ app.config["JWT_SECRET_KEY"] = os.getenv("JWT_SECRET_KEY", "dev-secret-key-chang
 app.config["JWT_ACCESS_TOKEN_EXPIRES"] = timedelta(hours=24)
 app.config["JWT_REFRESH_TOKEN_EXPIRES"] = timedelta(days=30)
 jwt = JWTManager(app)
+
+# Initialize OpenTelemetry
+init_opentelemetry()
+logger.info("OpenTelemetry monitoring initialized")
+
+# Initialize metrics
+init_metrics()
+logger.info("Metrics collection initialized")
+
+# Initialize the Watchdog object
+watchdog = Watchdog(app)
+
+# Apply request monitoring middleware
+request_monitoring = RequestMonitoringMiddleware(app)
+logger.info("Request monitoring middleware initialized")
 
 # JWT error handlers
 @jwt.expired_token_loader
@@ -87,9 +105,6 @@ def revoked_token_callback(jwt_header, jwt_payload):
         "code": "token_revoked"
     }), 401
 
-# Initialize the Watchdog object
-watchdog = Watchdog(app)
-
 # Define the IST timezone
 ist_timezone = pytz.timezone('Asia/Kolkata')
 
@@ -101,6 +116,18 @@ def get_current_time_ist():
         datetime: Current datetime in IST
     """
     return datetime.now(ist_timezone)
+
+# Instrument all blueprints for monitoring
+logger.info("Instrumenting API blueprints with monitoring")
+instrumented_blueprints = [
+    instrument_blueprint(auth_bp),
+    instrument_blueprint(users_bp),
+    instrument_blueprint(plants_bp),
+    instrument_blueprint(devices_bp),
+    instrument_blueprint(dashboard_bp),
+    instrument_blueprint(tasks_bp),
+    instrument_blueprint(base_bp)
+]
 
 # Register base blueprint (no /api prefix)
 app.register_blueprint(base_bp)

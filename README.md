@@ -26,6 +26,7 @@ The solar monitoring system consists of several core components:
 5. **Azure Database Client** (`azure_db.py`) - Manages PostgreSQL database interactions
 6. **AI Analysis Agent** (`ai_agent.py`) - Analyzes solar generation data for disruptions
 7. **Automated WebJobs** - Scheduled tasks for batch operations (located in the `jobs/` directory)
+8. **Monitoring System** (`monitoring/`) - OpenTelemetry-based monitoring for API routes, services, database operations, and external API calls
 
 ### Service Layer
 
@@ -122,6 +123,16 @@ Several valuable features were recently added to the system:
 - More accurate detection of ongoing disruptions
 - Background task management for long-running analyses
 
+#### Comprehensive Monitoring System
+- OpenTelemetry-based monitoring for all components
+- Route instrumentation to track API requests, response times, and success/failure rates
+- Service monitoring to track business operations
+- Database operation monitoring for performance tracking
+- External API call monitoring
+- Integration with Azure Monitor for centralized logging and metrics
+- Custom metrics collection for business-specific measurements
+- Detailed documentation in the `docs/monitoring.md` file
+
 ## Installation
 
 ### Prerequisites
@@ -169,6 +180,9 @@ Several valuable features were recently added to the system:
    
    # Azure AI configuration
    PROJECT_CONNECTION_STRING_AI=your_azure_ai_connection_string
+   
+   # Azure Monitor configuration
+   APPLICATIONINSIGHTS_CONNECTION_STRING=your_application_insights_connection_string
    ```
 
 5. Run the application:
@@ -382,3 +396,54 @@ GET /devices/history/batch-ingest?date=2023-07-15&overwrite=true
 # Analyze disruptions for all inverters
 GET /devices/disruptions/batch-analyze?start_date=2023-07-15&end_date=2023-07-15
 ```
+
+## Environment Configuration
+
+The application requires a `.env` file with the following variables:
+
+```
+# Application settings
+FLASK_APP=app.py
+FLASK_ENV=development
+APP_VERSION=1.0.0
+
+# Azure Database configuration
+AZURE_DB_SERVER=your-db-server.database.windows.net
+AZURE_DB_NAME=your-db-name
+AZURE_DB_USER=your-db-user
+AZURE_DB_PASSWORD=your-db-password
+AZURE_DB_DRIVER={ODBC Driver 17 for SQL Server}
+
+# JWT Authentication
+JWT_SECRET_KEY=your-jwt-secret-key
+
+# Monitoring configuration (used for both App Insights and OpenTelemetry)
+APPLICATIONINSIGHTS_CONNECTION_STRING=InstrumentationKey=your-instrumentation-key;IngestionEndpoint=https://your-region.in.applicationinsights.azure.com/
+
+# OpenAI configuration (for AI agent)
+OPENAI_API_KEY=your-openai-api-key
+
+# Growatt API credentials
+GROWATT_API_USER=your-growatt-username
+GROWATT_API_PASSWORD=your-growatt-password
+```
+
+## Monitoring and Instrumentation
+
+The application uses OpenTelemetry, a modern open-source observability framework, for comprehensive monitoring:
+
+### OpenTelemetry Instrumentation
+
+- **Service Monitoring**: All service classes are instrumented to track method execution with detailed spans
+- **Database Monitoring**: Database operations are tracked with query information and execution times
+- **API Monitoring**: External API calls to Growatt are monitored with detailed timing and response data
+- **Azure Integration**: Telemetry is sent to Azure Monitor using the Azure Monitor OpenTelemetry Distro
+
+This approach provides unified traces, metrics, and logs for better observability, making it easier to:
+
+- Track request flows across services
+- Identify performance bottlenecks
+- Debug issues with detailed context
+- Monitor system health in real-time
+
+The OpenTelemetry implementation follows the vendor-neutral approach while leveraging Azure-specific capabilities when sending data to Azure Monitor.
