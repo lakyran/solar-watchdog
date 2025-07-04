@@ -3,6 +3,7 @@ import logging
 from psycopg2 import pool
 from datetime import datetime, timezone
 import pytz
+import uuid
 
 class AzureDB:
     def __init__(self):
@@ -1875,6 +1876,231 @@ class AzureDB:
             return {
                 "status": "error",
                 "message": str(e)
+            }
+        
+        finally:
+            if cursor:
+                cursor.close()
+            if conn:
+                self.connection_pool.putconn(conn)
+    
+    def insert_android_device_token(self, user_id, token, device_id, notification_enabled=True):
+        """
+        Insert or update an Android device token for a user
+        
+        Args:
+            user_id (str): User ID
+            token (str): FCM registration token
+            device_id (str): Device identifier
+            notification_enabled (bool, optional): Whether notifications are enabled for this device
+            
+        Returns:
+            dict: Result of the operation
+        """
+        if not self.connection_pool:
+            self.logger.error("Database connection pool not available")
+            raise ValueError("Database connection pool not available")
+            
+        conn = None
+        cursor = None
+        
+        try:
+            # Get connection from pool
+            conn = self.connection_pool.getconn()
+            cursor = conn.cursor()
+            
+            current_time = self.get_current_time_ist()
+            token_id = str(uuid.uuid4())
+            
+            # Check if token already exists for this user and device
+            cursor.execute(
+                """
+                SELECT token_id FROM android_device_tokens 
+                WHERE user_id = %s AND device_id = %s
+                """,
+                (user_id, device_id)
+            )
+            
+            existing_token = cursor.fetchone()
+            
+            if existing_token:
+                # Update existing token
+                cursor.execute(
+                    """
+                    UPDATE android_device_tokens
+                    SET token = %s,
+                        is_active = TRUE,
+                        notification_enabled = %s,
+                        updated_at = %s,
+                        last_used_at = %s
+                    WHERE user_id = %s AND device_id = %s
+                    RETURNING token_id
+                    """,
+                    (token, notification_enabled, current_time, current_time, user_id, device_id)
+                )
+                token_id = cursor.fetchone()[0]
+                self.logger.info(f"Updated device token for user {user_id}, device {device_id}")
+            else:
+                # Insert new token
+                cursor.execute(
+                    """
+                    INSERT INTO android_device_tokens
+                    (token_id, user_id, token, device_id, is_active, notification_enabled, created_at, updated_at, last_used_at)
+                    VALUES (%s, %s, %s, %s, TRUE, %s, %s, %s, %s)
+                    RETURNING token_id
+                    """,
+                    (token_id, user_id, token, device_id, notification_enabled, current_time, current_time, current_time)
+                )
+                token_id = cursor.fetchone()[0]
+                self.logger.info(f"Inserted new device token for user {user_id}, device {device_id}")
+            
+            # Commit the transaction
+            conn.commit()
+            
+            return {
+                "status": "success",
+                "token_id": token_id,
+                "message": "Device token registered successfully"
+            }
+            
+        except Exception as e:
+            if conn:
+                conn.rollback()
+            error_msg = f"Error registering device token: {str(e)}"
+            self.logger.error(error_msg)
+            return {
+                "status": "error",
+                "message": error_msg
+            }
+        
+        finally:
+            if cursor:
+                cursor.close()
+            if conn:
+                self.connection_pool.putconn(conn)
+    
+    def get_android_device_tokens(self, user_id=None):
+        """
+        Get Android device tokens for a specific user or all active tokens
+        
+        Args:
+            user_id (str, optional): User ID to filter tokens
+            
+        Returns:
+            list: List of device token records
+        """
+        if not self.connection_pool:
+            self.logger.error("Database connection pool not available")
+            raise ValueError("Database connection pool not available")
+            
+        conn = None
+        cursor = None
+        
+        try:
+            # Get connection from pool
+            conn = self.connection_pool.getconn()
+            cursor = conn.cursor()
+            
+            if user_id:
+                # Get tokens for specific user
+                cursor.execute(
+                    """
+                    SELECT token_id, user_id, token, device_id, is_active, notification_enabled,
+                           TO_CHAR(created_at, 'YYYY-MM-DD HH24:MI:SS') as created_at,
+                           TO_CHAR(updated_at, 'YYYY-MM-DD HH24:MI:SS') as updated_at,
+                           TO_CHAR(last_used_at, 'YYYY-MM-DD HH24:MI:SS') as last_used_at
+                    FROM android_device_tokens
+                    WHERE user_id = %s AND is_active = TRUE
+                    """,
+                    (user_id,)
+                )
+            else:
+                # Get all active tokens
+                cursor.execute(
+                    """
+                    SELECT token_id, user_id, token, device_id, is_active, notification_enabled,
+                           TO_CHAR(created_at, 'YYYY-MM-DD HH24:MI:SS') as created_at,
+                           TO_CHAR(updated_at, 'YYYY-MM-DD HH24:MI:SS') as updated_at,
+                           TO_CHAR(last_used_at, 'YYYY-MM-DD HH24:MI:SS') as last_used_at
+                    FROM android_device_tokens
+                    WHERE is_active = TRUE
+                    """
+                )
+            
+            column_names = [desc[0] for desc in cursor.description]
+            tokens = []
+            
+            for row in cursor.fetchall():
+                token = dict(zip(column_names, row))
+                tokens.append(token)
+                
+            self.logger.info(f"Retrieved {len(tokens)} device tokens" + 
+                           (f" for user {user_id}" if user_id else ""))
+                
+            return tokens
+            
+        except Exception as e:
+            error_msg = f"Error retrieving device tokens: {str(e)}"
+            self.logger.error(error_msg)
+            raise Exception(error_msg)
+        
+        finally:
+            if cursor:
+                cursor.close()
+            if conn:
+                self.connection_pool.putconn(conn)
+                
+    def update_device_token_last_used(self, token_id):
+        """
+        Update the last_used_at timestamp for a device token
+        
+        Args:
+            token_id (str): Token ID to update
+            
+        Returns:
+            dict: Result of the operation
+        """
+        if not self.connection_pool:
+            self.logger.error("Database connection pool not available")
+            raise ValueError("Database connection pool not available")
+            
+        conn = None
+        cursor = None
+        
+        try:
+            # Get connection from pool
+            conn = self.connection_pool.getconn()
+            cursor = conn.cursor()
+            
+            current_time = self.get_current_time_ist()
+            
+            cursor.execute(
+                """
+                UPDATE android_device_tokens
+                SET last_used_at = %s
+                WHERE token_id = %s
+                """,
+                (current_time, token_id)
+            )
+            
+            # Commit the transaction
+            conn.commit()
+            
+            self.logger.debug(f"Updated last_used_at for token {token_id}")
+            
+            return {
+                "status": "success",
+                "message": "Token last used timestamp updated"
+            }
+            
+        except Exception as e:
+            if conn:
+                conn.rollback()
+            error_msg = f"Error updating token last used: {str(e)}"
+            self.logger.error(error_msg)
+            return {
+                "status": "error",
+                "message": error_msg
             }
         
         finally:

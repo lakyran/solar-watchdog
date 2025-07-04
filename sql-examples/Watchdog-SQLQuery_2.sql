@@ -156,3 +156,15 @@ SELECT plant_id, plant_name, max(date), max(day_energy)
 FROM plant_daily_generation_history
 WHERE date = '2025-05-07'
 GROUP BY plant_id, plant_name
+
+CREATE TABLE android_device_tokens (
+    token_id        UUID PRIMARY KEY,
+    user_id         VARCHAR NOT NULL,
+    token           VARCHAR NOT NULL,
+    device_id       VARCHAR NOT NULL,
+    is_active       BOOLEAN NOT NULL,
+    notification_enabled BOOLEAN NOT NULL,
+    created_at      TIMESTAMP NOT NULL
+    updated_at      TIMESTAMP NOT NULL,
+    last_used_at    TIMESTAMP NOT NULL,    
+);

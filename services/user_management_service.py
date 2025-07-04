@@ -439,4 +439,103 @@ class UserManagementService(BaseService):
         except Exception as e:
             error_msg = f"Error getting current power for user {username}{' plant ' + plant_id if plant_id else ''}: {str(e)}"
             self.logger.error(error_msg)
-            raise Exception(error_msg) 
+            raise Exception(error_msg)
+    
+    def register_device_token(self, username, device_id, token, device_platform, notification_enabled=True):
+        """
+        Register a device token for push notifications
+        
+        Args:
+            username (str): Username of the user
+            device_id (str): Unique identifier for the device
+            token (str): Device token for push notifications
+            device_platform (str): Platform of the device (android, ios)
+            notification_enabled (bool, optional): Whether notifications are enabled
+            
+        Returns:
+            dict: Result of the operation
+        """
+        try:
+            self.logger.info(f"Registering device token for user {username}, device {device_id}, platform {device_platform}")
+            
+            # Get user from database
+            user = self.get_user(username)
+            
+            # Check if user exists
+            if not user:
+                self.logger.warning(f"User {username} not found when registering device token")
+                return {
+                    "status": "error",
+                    "message": "User not found"
+                }
+            
+            user_id = user.get('user_id')
+            
+            # Register token based on platform
+            if device_platform.lower() == 'android':
+                result = self.db_client.insert_android_device_token(
+                    user_id=user_id,
+                    token=token,
+                    device_id=device_id,
+                    notification_enabled=notification_enabled
+                )
+                return result
+            else:
+                self.logger.warning(f"Unsupported device platform: {device_platform}")
+                return {
+                    "status": "error",
+                    "message": f"Unsupported device platform: {device_platform}"
+                }
+                
+        except Exception as e:
+            error_msg = f"Error registering device token: {str(e)}"
+            self.logger.error(error_msg)
+            return {
+                "status": "error",
+                "message": error_msg
+            }
+    
+    def get_user_device_tokens(self, username):
+        """
+        Get all device tokens for a user
+        
+        Args:
+            username (str): Username to get tokens for
+            
+        Returns:
+            dict: Dictionary containing device tokens by platform
+        """
+        try:
+            self.logger.info(f"Getting device tokens for user {username}")
+            
+            # Get user from database
+            user = self.get_user(username)
+            
+            # Check if user exists
+            if not user:
+                self.logger.warning(f"User {username} not found when getting device tokens")
+                return {
+                    "status": "error",
+                    "message": "User not found"
+                }
+            
+            user_id = user.get('user_id')
+            
+            # Get Android tokens
+            android_tokens = self.db_client.get_android_device_tokens(user_id=user_id)
+            
+            return {
+                "status": "success",
+                "tokens": {
+                    "android": android_tokens,
+                    # Add other platforms here in the future
+                }
+            }
+                
+        except Exception as e:
+            error_msg = f"Error getting user device tokens: {str(e)}"
+            self.logger.error(error_msg)
+            return {
+                "status": "error",
+                "message": error_msg
+            } 
