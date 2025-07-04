@@ -30,7 +30,7 @@ group by device_sn
 
 SELECT device_sn, min(user_name), date(datetime) as day, count(*)
 from power_gen_history
-where device_sn = 'BEJACFM01J'
+where device_sn = 'BEJACFM00T'
 group by device_sn, DATE(datetime)
 order by device_sn, day
 
