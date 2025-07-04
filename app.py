@@ -1,14 +1,10 @@
-from flask import Flask, jsonify, request, render_template, send_from_directory
-import logging
+from flask import Flask, jsonify
 from dotenv import load_dotenv
 from watchdog import Watchdog
-import time
 from datetime import datetime, timedelta
 import pytz
-from flask_jwt_extended import JWTManager, create_access_token, get_jwt_identity, jwt_required, create_refresh_token, get_jwt, verify_jwt_in_request, jwt_required, current_user
+from flask_jwt_extended import JWTManager
 import os
-from werkzeug.security import check_password_hash
-from functools import wraps
 
 # Import blueprints
 from routes.auth import auth_bp
@@ -23,11 +19,8 @@ from routes.base import base_bp
 from monitoring.config import init_opentelemetry
 from monitoring.route_monitor import instrument_blueprint, RequestMonitoringMiddleware
 from monitoring.metrics import init_metrics
-from azure_db import AzureDB
-from growatt import GrowattAPI
 from logging_config import configure_logging
 
-# Configure logging using centralized config
 logger = configure_logging(verbose=False)
 logger.info("Starting Unisolar Watchdog Service")
 
