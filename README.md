@@ -210,83 +210,62 @@ The system includes several WebJobs for automated tasks:
 
 ## API Routes
 
-### Device History Management
+All API routes are prefixed with `/api` unless otherwise noted.
 
-#### Test Growatt Device History
-- **Route**: `/device/history/test`
-- **Method**: GET
-- **Query Parameters**:
-  - `device_sn`: Device serial number (required)
-  - `date`: Date in YYYY-MM-DD format (required)
-  - `page`: Page number for pagination (default: 1)
-- **Description**: Tests the Growatt API call to fetch device history without storing it.
+### Authentication
 
-#### Ingest Device Generation History
-- **Route**: `/device/history/ingest`
-- **Method**: GET
-- **Query Parameters**:
-  - `device_sn`: Device serial number (required)
-  - `date`: Date in YYYY-MM-DD format (optional, defaults to the latest record date or today)
-  - `overwrite`: Whether to overwrite existing records (optional, default: false)
-  - `store_records`: Whether to store the fetched records (optional, default: false)
-- **Description**: Fetches and stores device generation history.
+#### Login
+- **Route**: `/api/auth/login`
+- **Method**: POST
+- **Request Body**:
+  - `username`: Username for authentication (required)
+  - `password`: User password (required)
+  - `device_id`: Device identifier for push notifications (optional)
+  - `device_token`: Device token for push notifications (optional)
+  - `device_platform`: Platform of the device (android, ios) (optional)
+- **Description**: Authenticate user and issue JWT tokens.
 
-#### Get Device History
-- **Route**: `/device/history`
-- **Method**: GET
-- **Query Parameters**:
-  - `device_sn`: Device serial number (required)
-  - `date`: Date in YYYY-MM-DD format (required)
-- **Description**: Retrieves stored history records for a device on a specific date.
+#### Refresh Token
+- **Route**: `/api/auth/refresh`
+- **Method**: POST
+- **Headers**: `Authorization: Bearer <refresh_token>`
+- **Description**: Issue a new access token using a valid refresh token.
 
-### Disruption Analysis
+#### Validate Token
+- **Route**: `/api/auth/validate`
+- **Method**: POST
+- **Headers**: `Authorization: Bearer <access_token>`
+- **Description**: Validate that an access token is still valid.
 
-#### Analyze Device Disruptions
-- **Route**: `/device/analyze_disruptions`
-- **Method**: GET
-- **Query Parameters**:
-  - `device_sn`: Device serial number (required)
-  - `date`: Date in YYYY-MM-DD format (optional, defaults to yesterday)
-- **Description**: Analyzes generation data to identify disruptions without storing them.
-
-#### Analyze and Store Disruptions
-- **Route**: `/device/analyze_and_store_disruptions`
-- **Method**: GET
-- **Query Parameters**:
-  - `device_sn`: Device serial number (required)
-  - `date`: Date in YYYY-MM-DD format (optional, defaults to yesterday)
-- **Description**: Analyzes generation data and stores identified disruption events.
-
-#### Analyze Disruptions for Date Range
-- **Route**: `/device/analyze_disruptions_range`
-- **Method**: GET
-- **Query Parameters**:
-  - `device_sn`: Device serial number (required)
-  - `start_date`: Start date in YYYY-MM-DD format (optional)
-  - `end_date`: End date in YYYY-MM-DD format (optional, defaults to today)
-  - `overwrite`: Whether to overwrite existing analysis (optional, default: true)
-- **Description**: Analyzes disruptions over a date range as a background task.
-
-#### Get Task Status
-- **Route**: `/tasks/<task_id>`
-- **Method**: GET
-- **Parameters**:
-  - `task_id`: ID of the background task
-- **Description**: Gets the status of a background analysis task.
-
-#### Get Device Disruption Events
-- **Route**: `/device/disruption_events`
-- **Method**: GET
-- **Query Parameters**:
-  - `device_sn`: Device serial number (required)
-  - `date`: Date in YYYY-MM-DD format (optional)
-- **Description**: Retrieves stored disruption events for a device.
+#### Register Device Token
+- **Route**: `/api/auth/register_device_token`
+- **Method**: POST
+- **Headers**: `Authorization: Bearer <access_token>`
+- **Request Body**:
+  - `device_id`: Unique identifier for the device (required)
+  - `token`: Device token for push notifications (required)
+  - `device_platform`: Platform of the device (android, ios) (required)
+  - `notification_enabled`: Whether notifications are enabled (optional, default: true)
+- **Description**: Register a device token for push notifications.
 
 ### User Management
 
-#### Onboard New User
-- **Route**: `/users/onboard`
+#### Get User Profile
+- **Route**: `/api/users/me`
+- **Method**: GET
+- **Headers**: `Authorization: Bearer <access_token>`
+- **Description**: Get the current user's profile information.
+
+#### List Users (Admin Only)
+- **Route**: `/api/users/list`
+- **Method**: GET
+- **Headers**: `Authorization: Bearer <access_token>`
+- **Description**: Get a list of all users in the system (admin only).
+
+#### Onboard New User (Admin Only)
+- **Route**: `/api/users/onboard`
 - **Method**: POST
+- **Headers**: `Authorization: Bearer <access_token>`
 - **Request Body**:
   - `username`: Username for the new user (required)
   - `user_id`: User ID from Growatt (required)
@@ -298,47 +277,202 @@ The system includes several WebJobs for automated tasks:
   - `bootstrap_history`: Whether to bootstrap history (optional, default: true)
 - **Description**: Onboards a new user with their plants and devices.
 
-#### Get User Dashboard Data
-- **Route**: `/users/dashboard`
-- **Method**: GET
-- **Query Parameters**:
-  - `username`: Username (required)
-- **Description**: Gets dashboard data for a user.
+### Dashboard
 
-#### Get Current Power for User
-- **Route**: `/users/current-power`
+#### Get User Dashboard
+- **Route**: `/api/dashboard`
 - **Method**: GET
+- **Headers**: `Authorization: Bearer <access_token>`
 - **Query Parameters**:
-  - `username`: Username (required)
-  - `plant_id`: Plant ID (optional)
-- **Description**: Gets current power output for a user's plants.
+  - `username`: Username (optional, for admins to view other users' dashboards)
+- **Description**: Gets dashboard data for a user including their plant details and summary.
+
+### Device Management
+
+#### List Devices
+- **Route**: `/api/devices/list`
+- **Method**: GET
+- **Headers**: `Authorization: Bearer <access_token>`
+- **Query Parameters**:
+  - `username`: Username filter (optional, admin only)
+- **Description**: Get a list of all inverters, optionally filtered by username.
+
+#### Test Growatt Device History
+- **Route**: `/api/devices/history/test`
+- **Method**: GET
+- **Headers**: `Authorization: Bearer <access_token>`
+- **Query Parameters**:
+  - `device_sn`: Device serial number (required)
+  - `date`: Date in YYYY-MM-DD format (required)
+  - `page`: Page number for pagination (default: 1)
+- **Description**: Tests the Growatt API call to fetch device history without storing it.
+
+#### Ingest Device Generation History
+- **Route**: `/api/devices/history/ingest`
+- **Method**: GET
+- **Headers**: `Authorization: Bearer <access_token>`
+- **Query Parameters**:
+  - `device_sn`: Device serial number (required)
+  - `date`: Date in YYYY-MM-DD format (optional, defaults to the latest record date or today)
+  - `overwrite`: Whether to overwrite existing records (optional, default: false)
+  - `store_records`: Whether to store the fetched records (optional, default: false)
+- **Description**: Fetches and stores device generation history.
+
+#### Get Device History
+- **Route**: `/api/devices/history`
+- **Method**: GET
+- **Headers**: `Authorization: Bearer <access_token>`
+- **Query Parameters**:
+  - `device_sn`: Device serial number (required)
+  - `plant_id`: Plant ID (alternative to device_sn)
+  - `date`: Date in YYYY-MM-DD format (required)
+- **Description**: Retrieves stored history records for a device on a specific date.
+
+#### Batch Ingest Device History (Admin Only)
+- **Route**: `/api/devices/history/batch-ingest`
+- **Method**: GET
+- **Headers**: `Authorization: Bearer <access_token>`
+- **Query Parameters**:
+  - `date`: Date in YYYY-MM-DD format (optional)
+  - `overwrite`: Whether to overwrite existing records (optional, default: false)
+  - `store_records`: Whether to store the fetched records (optional, default: true)
+  - `device_sn`: Specific device serial number (optional)
+- **Description**: Batch ingest generation history for all inverters.
+
+### Disruption Analysis
+
+#### Analyze Device Disruptions
+- **Route**: `/api/devices/analyze_disruptions`
+- **Method**: GET
+- **Headers**: `Authorization: Bearer <access_token>`
+- **Query Parameters**:
+  - `device_sn`: Device serial number (required)
+  - `date`: Date in YYYY-MM-DD format (optional, defaults to yesterday)
+- **Description**: Analyzes generation data to identify disruptions without storing them.
+
+#### Analyze and Store Disruptions
+- **Route**: `/api/devices/analyze_and_store_disruptions`
+- **Method**: GET
+- **Headers**: `Authorization: Bearer <access_token>`
+- **Query Parameters**:
+  - `device_sn`: Device serial number (required)
+  - `date`: Date in YYYY-MM-DD format (optional, defaults to yesterday)
+- **Description**: Analyzes generation data and stores identified disruption events.
+
+#### Analyze Disruptions for Date Range
+- **Route**: `/api/devices/analyze_disruptions_range`
+- **Method**: GET
+- **Headers**: `Authorization: Bearer <access_token>`
+- **Query Parameters**:
+  - `device_sn`: Device serial number (required)
+  - `start_date`: Start date in YYYY-MM-DD format (optional)
+  - `end_date`: End date in YYYY-MM-DD format (optional, defaults to today)
+  - `overwrite`: Whether to overwrite existing analysis (optional, default: true)
+- **Description**: Analyzes disruptions over a date range as a background task.
+
+#### Batch Analyze Disruptions (Admin Only)
+- **Route**: `/api/devices/disruptions/batch-analyze`
+- **Method**: GET
+- **Headers**: `Authorization: Bearer <access_token>`
+- **Query Parameters**:
+  - `start_date`: Start date in YYYY-MM-DD format (optional)
+  - `end_date`: End date in YYYY-MM-DD format (optional)
+  - `overwrite`: Whether to overwrite existing analysis (optional, default: true)
+- **Description**: Analyze disruptions for all inverters in the database.
+
+#### Get Device Disruption Events
+- **Route**: `/api/devices/disruption_events`
+- **Method**: GET
+- **Headers**: `Authorization: Bearer <access_token>`
+- **Query Parameters**:
+  - `device_sn`: Device serial number (required)
+  - `date`: Date in YYYY-MM-DD format (optional)
+- **Description**: Retrieves stored disruption events for a device.
 
 ### Plant Management
 
-#### Fetch and Store Plant Summary
-- **Route**: `/plants/summary`
+#### List Plants
+- **Route**: `/api/plants/list`
 - **Method**: GET
+- **Headers**: `Authorization: Bearer <access_token>`
+- **Query Parameters**:
+  - `username`: Username filter (optional, admin only)
+- **Description**: Get a list of all plants, optionally filtered by username.
+
+#### Get Plant Summary
+- **Route**: `/api/plants/summary`
+- **Method**: GET
+- **Headers**: `Authorization: Bearer <access_token>`
 - **Query Parameters**:
   - `plant_id`: Plant ID (required)
-- **Description**: Fetches and stores plant summary data.
+- **Description**: Get energy summary for a specific plant.
 
-#### Fetch and Store Plant Energy Daily Generation
-- **Route**: `/plants/energy/daily`
+#### Ingest Plant Summary
+- **Route**: `/api/plants/summary/ingest`
 - **Method**: GET
+- **Headers**: `Authorization: Bearer <access_token>`
+- **Query Parameters**:
+  - `plant_id`: Plant ID (required)
+- **Description**: Fetch plant energy summary from Growatt API and store it in the database.
+
+#### Batch Ingest Plant Summaries (Admin Only)
+- **Route**: `/api/plants/summary/batch-ingest`
+- **Method**: GET
+- **Headers**: `Authorization: Bearer <access_token>`
+- **Description**: Fetch and store energy summaries for all plants in the system.
+
+#### Ingest Plant Energy Daily Data
+- **Route**: `/api/plants/energy/daily/ingest`
+- **Method**: GET
+- **Headers**: `Authorization: Bearer <access_token>`
 - **Query Parameters**:
   - `plant_id`: Plant ID (required)
   - `start_date`: Start date in YYYY-MM-DD format (optional)
   - `end_date`: End date in YYYY-MM-DD format (optional)
-- **Description**: Fetches and stores plant energy daily generation data.
+- **Description**: Fetch and store daily energy generation data for a plant over a date range.
 
-#### Get Efficiency Snapshot Data
-- **Route**: `/plants/efficiency/snapshot`
+#### Batch Ingest Plant Energy Daily Data (Admin Only)
+- **Route**: `/api/plants/energy/daily/batch-ingest`
+- **Method**: GET
+- **Headers**: `Authorization: Bearer <access_token>`
+- **Query Parameters**:
+  - `start_date`: Start date in YYYY-MM-DD format (optional)
+  - `end_date`: End date in YYYY-MM-DD format (optional)
+- **Description**: Fetch and store daily energy generation data for all plants over a date range.
+
+### Task Management
+
+#### Get Task Status
+- **Route**: `/api/tasks/<task_id>`
+- **Method**: GET
+- **Headers**: `Authorization: Bearer <access_token>`
+- **Parameters**:
+  - `task_id`: ID of the background task
+- **Description**: Gets the status of a background analysis task.
+
+### Web Interface (No /api prefix)
+
+#### Welcome Page
+- **Route**: `/`
+- **Method**: GET
+- **Description**: Serve the welcome page.
+
+#### View Disruption Events
+- **Route**: `/disruptions/view`
+- **Method**: GET
+- **Query Parameters**:
+  - `device_sn`: Device serial number (optional)
+  - `date`: Date in YYYY-MM-DD format (optional)
+- **Description**: Display disruption events for a device in a human-readable HTML format.
+
+#### View Efficiency Snapshot
+- **Route**: `/efficiency/view`
 - **Method**: GET
 - **Query Parameters**:
   - `min_eff`: Minimum efficiency (optional, default: 0)
   - `max_eff`: Maximum efficiency (optional, default: 100)
-  - `plant_name_selected`: Selected plant name (optional)
-- **Description**: Gets efficiency snapshot data for plants.
+  - `plant_name`: Selected plant name for 7-day efficiency plot (optional)
+- **Description**: Display efficiency snapshot in a human-readable HTML format.
 
 ## Service Architecture
 
