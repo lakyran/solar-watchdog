@@ -532,7 +532,8 @@ class AzureDB:
                 # Query for all dates
                 cursor.execute(
                     """
-                    SELECT 
+                    SELECT
+                        TO_CHAR(created_at, 'YYYY-MM-DD HH24:MI:SS') as created_at,
                         event_id, 
                         user_name, 
                         user_id, 
@@ -541,9 +542,9 @@ class AzureDB:
                         device_oem, 
                         device_type, 
                         plant_id, 
-                        TO_CHAR(event_date, 'YYYY-MM-DD') as event_date, 
-                        start_time, 
-                        end_time, 
+                        TO_CHAR(event_date, 'YYYY-MM-DD') as event_date,
+                        TO_CHAR(start_time, 'YYYY-MM-DD HH24:MI:SS') as start_time, 
+                        TO_CHAR(end_time, 'YYYY-MM-DD HH24:MI:SS') as end_time,
                         total_duration, 
                         fault_details,
                         impact_of_event,
@@ -551,8 +552,7 @@ class AzureDB:
                         power_generation_during_disruption, 
                         parameters_behaviour_during_disruption, 
                         is_ongoing_event, 
-                        further_action_required,
-                        TO_CHAR(created_at, 'YYYY-MM-DD HH24:MI:SS') as created_at
+                        further_action_required
                     FROM disruption_events 
                     WHERE device_sn = %s
                     ORDER BY event_date DESC, start_time DESC
