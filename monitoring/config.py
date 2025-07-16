@@ -34,10 +34,15 @@ def init_opentelemetry():
     logging.getLogger('opentelemetry').setLevel(logging.WARNING)
     
     connection_string = os.getenv("APPLICATIONINSIGHTS_CONNECTION_STRING")
+    env = os.getenv("ENV", "DEVELOPMENT").upper()
     
     if not connection_string:
         print("WARNING: No Application Insights connection string found. OpenTelemetry will not send data to Azure Monitor.")
         return
+    
+    # Skip Azure Monitor in development if connection fails
+    if env == "DEVELOPMENT":
+        print("Development mode: Azure Monitor telemetry is optional")
     
     # Define specific instrumentors to use
     instrumentations = [
@@ -65,8 +70,14 @@ def init_opentelemetry():
         
         print("OpenTelemetry initialized with Azure Monitor")
     except Exception as e:
-        print(f"Error initializing OpenTelemetry: {e}")
-        logging.error(f"Failed to initialize OpenTelemetry: {e}")
+        if env == "DEVELOPMENT":
+            print(f"Development mode: Azure Monitor connection failed, continuing without telemetry: {e}")
+            logging.warning(f"Azure Monitor unavailable in development: {e}")
+        else:
+            print(f"Error initializing OpenTelemetry: {e}")
+            logging.error(f"Failed to initialize OpenTelemetry: {e}")
+            # In production, you might want to raise the exception
+            # raise
 
 def get_tracer(name):
     """
