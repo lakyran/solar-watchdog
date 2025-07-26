@@ -1,5 +1,3 @@
-# Privacy Policy for UnisolarWatchdog
-
 **Last updated: 26-07-2025**
 
 ## Introduction

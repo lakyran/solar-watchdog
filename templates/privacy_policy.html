@@ -1,58 +1,155 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Privacy Policy - Unisolartech Watchdog</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .privacy-content h1 {
+            font-size: 2rem;
+            font-weight: bold;
+            color: #4338ca;
+            margin-top: 2rem;
+            margin-bottom: 1rem;
+            border-bottom: 2px solid #e5e7eb;
+            padding-bottom: 0.5rem;
+        }
+
+        .privacy-content h2 {
+            font-size: 1.5rem;
+            font-weight: bold;
+            color: #1f2937;
+            margin-top: 1.5rem;
+            margin-bottom: 0.75rem;
+        }
+
+        .privacy-content h3 {
+            font-size: 1.25rem;
+            font-weight: semibold;
+            color: #374151;
+            margin-top: 1.25rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .privacy-content h4 {
+            font-size: 1.125rem;
+            font-weight: semibold;
+            color: #4b5563;
+            margin-top: 1rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .privacy-content p {
+            margin-bottom: 1rem;
+            line-height: 1.6;
+            color: #374151;
+        }
+
+        .privacy-content ul,
+        .privacy-content ol {
+            margin-bottom: 1rem;
+            padding-left: 1.5rem;
+        }
+
+        .privacy-content li {
+            margin-bottom: 0.5rem;
+            line-height: 1.6;
+            color: #374151;
+        }
+
+        .privacy-content strong {
+            font-weight: bold;
+            color: #1f2937;
+        }
+
+        .privacy-content em {
+            font-style: italic;
+        }
+
+        .privacy-content code {
+            background-color: #f3f4f6;
+            padding: 0.125rem 0.25rem;
+            border-radius: 0.25rem;
+            font-family: monospace;
+            font-size: 0.875rem;
+        }
+
+        .privacy-content blockquote {
+            border-left: 4px solid #d1d5db;
+            padding-left: 1rem;
+            margin: 1rem 0;
+            font-style: italic;
+            color: #6b7280;
+        }
+
+        .privacy-content a {
+            color: #4338ca;
+            text-decoration: underline;
+        }
+
+        .privacy-content a:hover {
+            color: #3730a3;
+        }
+    </style>
 </head>
+
 <body class="bg-gradient-to-br from-yellow-100 via-blue-100 to-blue-300 min-h-screen text-gray-800 relative">
     <!-- Decorative sun icon in the top left -->
     <div class="absolute left-0 top-0 m-6 z-0">
         <svg width="60" height="60" viewBox="0 0 60 60" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <circle cx="30" cy="30" r="18" fill="#FDE68A"/>
+            <circle cx="30" cy="30" r="18" fill="#FDE68A" />
             <g stroke="#F59E42" stroke-width="2">
-                <line x1="30" y1="4" x2="30" y2="16"/>
-                <line x1="30" y1="44" x2="30" y2="56"/>
-                <line x1="4" y1="30" x2="16" y2="30"/>
-                <line x1="44" y1="30" x2="56" y2="30"/>
-                <line x1="12.93" y1="12.93" x2="20.49" y2="20.49"/>
-                <line x1="39.51" y1="39.51" x2="47.07" y2="47.07"/>
-                <line x1="12.93" y1="47.07" x2="20.49" y2="39.51"/>
-                <line x1="39.51" y1="20.49" x2="47.07" y2="12.93"/>
+                <line x1="30" y1="4" x2="30" y2="16" />
+                <line x1="30" y1="44" x2="30" y2="56" />
+                <line x1="4" y1="30" x2="16" y2="30" />
+                <line x1="44" y1="30" x2="56" y2="30" />
+                <line x1="12.93" y1="12.93" x2="20.49" y2="20.49" />
+                <line x1="39.51" y1="39.51" x2="47.07" y2="47.07" />
+                <line x1="12.93" y1="47.07" x2="20.49" y2="39.51" />
+                <line x1="39.51" y1="20.49" x2="47.07" y2="12.93" />
             </g>
         </svg>
     </div>
     <div class="container mx-auto px-4 py-8 max-w-4xl relative z-10">
         <a href="/" class="inline-flex items-center text-indigo-600 hover:text-indigo-800 mb-4 font-semibold">
-            <svg class="h-5 w-5 mr-1" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><path d="M15 19l-7-7 7-7"/></svg>
+            <svg class="h-5 w-5 mr-1" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"
+                stroke-linecap="round" stroke-linejoin="round">
+                <path d="M15 19l-7-7 7-7" />
+            </svg>
             Back to Home
         </a>
-        
+
         {% if error %}
-            <div class="bg-red-100 border-l-4 border-red-500 text-red-700 p-4 mb-6 rounded-md shadow">
-                <div class="flex">
-                    <div class="flex-shrink-0">
-                        <svg class="h-5 w-5 text-red-500" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
-                            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd" />
-                        </svg>
-                    </div>
-                    <div class="ml-3">
-                        <p class="text-sm font-medium">{{ error }}</p>
-                    </div>
+        <div class="bg-red-100 border-l-4 border-red-500 text-red-700 p-4 mb-6 rounded-md shadow">
+            <div class="flex">
+                <div class="flex-shrink-0">
+                    <svg class="h-5 w-5 text-red-500" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"
+                        fill="currentColor">
+                        <path fill-rule="evenodd"
+                            d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z"
+                            clip-rule="evenodd" />
+                    </svg>
+                </div>
+                <div class="ml-3">
+                    <p class="text-sm font-medium">{{ error }}</p>
                 </div>
             </div>
+        </div>
         {% else %}
-            <div class="bg-white bg-opacity-90 shadow-md rounded-lg p-8 border border-gray-200">
-                <h1 class="text-3xl font-bold text-indigo-700 mb-8 border-b pb-4">Privacy Policy</h1>
-                
-                <div class="prose prose-gray max-w-none">
-                    {{ privacy_content|safe }}
-                </div>
+        <div class="bg-white bg-opacity-90 shadow-md rounded-lg p-8 border border-gray-200">
+            <h1 class="text-3xl font-bold text-indigo-700 mb-8 border-b pb-4">Privacy Policy for Unisolar Power Mobile Application</h1>
+
+            <div class="prose prose-gray max-w-none privacy-content">
+                {{ privacy_content|safe }}
             </div>
+        </div>
         {% endif %}
-        
-        <footer class="mt-16 text-center text-gray-400 text-xs">&copy; 2025 UNISOLAR POWER PRIVATE LIMITED. All rights reserved.</footer>
+
+        <footer class="mt-16 text-center text-gray-400 text-xs">&copy; 2025 UNISOLAR POWER PRIVATE LIMITED. All rights
+            reserved.</footer>
     </div>
 </body>
+
 </html>
