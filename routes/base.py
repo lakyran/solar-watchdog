@@ -3,6 +3,8 @@ Base routes for the Unisolar Watchdog Service
 """
 from flask import Blueprint, jsonify, request, render_template, send_from_directory
 import logging
+import markdown
+import os
 
 # Set up logger
 logger = logging.getLogger(__name__)
@@ -159,4 +161,52 @@ def view_efficiency_snapshot():
             plant_efficiency_7d_labels=[],
             plant_hour_labels=[],
             error=str(e)
-        ) 
+        )
+
+# Privacy policy page
+@base_bp.route('/privacy-policy', methods=['GET'])
+def privacy_policy():
+    """Serve the privacy policy page"""
+    try:
+        # Read the privacy policy markdown file
+        privacy_file_path = 'privacy-policy.md'
+        
+        if not os.path.exists(privacy_file_path):
+            logger.error(f"Privacy policy file not found: {privacy_file_path}")
+            return render_template('privacy_policy.html', 
+                                 privacy_content=None,
+                                 error="Privacy policy file not found.")
+        
+        with open(privacy_file_path, 'r', encoding='utf-8') as file:
+            privacy_markdown = file.read()
+        
+        # Convert markdown to HTML
+        privacy_content = markdown.markdown(privacy_markdown)
+        
+        return render_template('privacy_policy.html', 
+                             privacy_content=privacy_content,
+                             error=None)
+                             
+    except FileNotFoundError:
+        logger.error(f"Privacy policy file not found: {privacy_file_path}")
+        return render_template('privacy_policy.html', 
+                             privacy_content=None,
+                             error="Privacy policy file not found.")
+    except IOError as e:
+        logger.error(f"Error reading privacy policy file: {str(e)}")
+        return render_template('privacy_policy.html', 
+                             privacy_content=None,
+                             error="Error reading privacy policy file.")
+    except Exception as e:
+        logger.error(f"Error processing privacy policy: {str(e)}")
+        # Fallback: try to display raw markdown content
+        try:
+            with open(privacy_file_path, 'r', encoding='utf-8') as file:
+                raw_content = file.read()
+            return render_template('privacy_policy.html', 
+                                 privacy_content=f"<pre>{raw_content}</pre>",
+                                 error="Markdown processing failed. Displaying raw content.")
+        except:
+            return render_template('privacy_policy.html', 
+                                 privacy_content=None,
+                                 error="Error processing privacy policy content.") 

@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Privacy Policy - Unisolartech Watchdog</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gradient-to-br from-yellow-100 via-blue-100 to-blue-300 min-h-screen text-gray-800 relative">
+    <!-- Decorative sun icon in the top left -->
+    <div class="absolute left-0 top-0 m-6 z-0">
+        <svg width="60" height="60" viewBox="0 0 60 60" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <circle cx="30" cy="30" r="18" fill="#FDE68A"/>
+            <g stroke="#F59E42" stroke-width="2">
+                <line x1="30" y1="4" x2="30" y2="16"/>
+                <line x1="30" y1="44" x2="30" y2="56"/>
+                <line x1="4" y1="30" x2="16" y2="30"/>
+                <line x1="44" y1="30" x2="56" y2="30"/>
+                <line x1="12.93" y1="12.93" x2="20.49" y2="20.49"/>
+                <line x1="39.51" y1="39.51" x2="47.07" y2="47.07"/>
+                <line x1="12.93" y1="47.07" x2="20.49" y2="39.51"/>
+                <line x1="39.51" y1="20.49" x2="47.07" y2="12.93"/>
+            </g>
+        </svg>
+    </div>
+    <div class="container mx-auto px-4 py-8 max-w-4xl relative z-10">
+        <a href="/" class="inline-flex items-center text-indigo-600 hover:text-indigo-800 mb-4 font-semibold">
+            <svg class="h-5 w-5 mr-1" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><path d="M15 19l-7-7 7-7"/></svg>
+            Back to Home
+        </a>
+        
+        {% if error %}
+            <div class="bg-red-100 border-l-4 border-red-500 text-red-700 p-4 mb-6 rounded-md shadow">
+                <div class="flex">
+                    <div class="flex-shrink-0">
+                        <svg class="h-5 w-5 text-red-500" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd" />
+                        </svg>
+                    </div>
+                    <div class="ml-3">
+                        <p class="text-sm font-medium">{{ error }}</p>
+                    </div>
+                </div>
+            </div>
+        {% else %}
+            <div class="bg-white bg-opacity-90 shadow-md rounded-lg p-8 border border-gray-200">
+                <h1 class="text-3xl font-bold text-indigo-700 mb-8 border-b pb-4">Privacy Policy</h1>
+                
+                <div class="prose prose-gray max-w-none">
+                    {{ privacy_content|safe }}
+                </div>
+            </div>
+        {% endif %}
+        
+        <footer class="mt-16 text-center text-gray-400 text-xs">&copy; 2025 UNISOLAR POWER PRIVATE LIMITED. All rights reserved.</footer>
+    </div>
+</body>
+</html>

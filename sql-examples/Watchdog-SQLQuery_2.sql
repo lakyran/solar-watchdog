@@ -31,7 +31,7 @@ CREATE TABLE disruption_events (
     UNIQUE (device_sn, event_date, start_time)
 )
 
-SELECT * FROM disruption_events WHERE device_sn = 'BEJACFM00T' 
+SELECT * FROM disruption_events WHERE device_sn = 'CZGBCL2141' ORDER BY start_time desc;
 
 CREATE TABLE users (
     user_id        VARCHAR NOT NULL,
@@ -164,7 +164,13 @@ CREATE TABLE android_device_tokens (
     device_id       VARCHAR NOT NULL,
     is_active       BOOLEAN NOT NULL,
     notification_enabled BOOLEAN NOT NULL,
-    created_at      TIMESTAMP NOT NULL
+    created_at      TIMESTAMP NOT NULL,
     updated_at      TIMESTAMP NOT NULL,
-    last_used_at    TIMESTAMP NOT NULL,    
+    last_used_at    TIMESTAMP NOT NULL,   
+    
+    UNIQUE (user_id, device_id)
 );
+
+CREATE INDEX idx_device_tokens_token ON android_device_tokens(token);
+
+SELECT * FROM android_device_tokens;
