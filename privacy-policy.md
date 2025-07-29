@@ -12,14 +12,26 @@ We collect several different types of information for various purposes to provid
 
 ### Types of Data Collected
 
-#### Personal Data
-While using our Service, we may ask you to provide us with certain personally identifiable information that can be used to contact or identify you ("Personal Data"). Personally identifiable information may include, but is not limited to:
+#### Data Collected Through the Mobile App
+When you use our mobile application, we collect:
+
+- Login credentials (username/password for authentication)
+- Usage data and app interaction patterns
+- Device information and technical data
+- Cookies and session data
+
+#### Personal Data Collected Offline
+Personal identifying information is collected through our offline subscription process, not directly through the mobile app. This includes:
 
 - Email address
 - First name and last name
 - Phone number
 - Address, State, Province, ZIP/Postal code, City
-- Cookies and Usage Data
+- Subscription details and service preferences
+- Payment information and billing details
+- Installation and service location data
+
+This offline-collected personal data is linked to your app account to provide you with personalized solar monitoring services and complete account functionality.
 
 #### Usage Data
 We may also collect information on how the Service is accessed and used ("Usage Data"). This Usage Data may include information such as your computer's Internet Protocol address (e.g. IP address), browser type, browser version, the pages of our Service that you visit, the time and date of your visit, the time spent on those pages, unique device identifiers and other diagnostic data.
@@ -31,6 +43,23 @@ We may collect information about your mobile device, including:
 - Unique device identifiers
 - Mobile network information
 - App version and usage statistics
+
+### Offline Data Collection and Integration
+
+When you subscribe to our solar monitoring services through offline channels (such as in-person registration, phone calls, or paper forms), we collect personal identifying information that is not gathered directly through the mobile app. This offline subscription process allows us to:
+
+- Establish your service account and subscription
+- Configure your solar monitoring system
+- Provide customer support and service maintenance
+- Process payments and billing
+
+The personal data collected offline is then integrated with your mobile app account to enable:
+- Personalized monitoring dashboards
+- System-specific alerts and notifications
+- Account management and service history
+- Technical support and maintenance scheduling
+
+This integration ensures you receive a complete and personalized solar monitoring experience while maintaining clear separation between app-collected technical data and offline-collected personal information.
 
 ## Use of Data
 
