@@ -8,7 +8,7 @@ from dotenv import load_dotenv
 from azure.identity import EnvironmentCredential
 
 # Import the GrowattAIAgent class
-from ai_agent import GrowattAIAgent
+from src.ai_agent import GrowattAIAgent
 
 # Configure logging
 logging.basicConfig(
