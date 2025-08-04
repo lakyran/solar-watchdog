@@ -56,15 +56,18 @@ class AzureDB:
     def init_connection(self):
         """Initialize database connection pool"""
         try:
+            # Increased connection pool size for better scalability
+            # Min connections: 5 (always keep some connections ready)
+            # Max connections: 50 (handle more concurrent requests)
             self.connection_pool = pool.SimpleConnectionPool(
-                1, 10,
+                5, 50,
                 host=self.db_host,
                 port=self.db_port,
                 database=self.db_name,
                 user=self.db_user,
                 password=self.db_password
             )
-            self.logger.info("PostgreSQL connection pool created successfully")
+            self.logger.info("PostgreSQL connection pool created successfully with 5-50 connections")
         except Exception as e:
             self.logger.error(f"Error creating PostgreSQL connection pool: {e}")
             self.connection_pool = None
