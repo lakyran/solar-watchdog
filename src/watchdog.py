@@ -3,8 +3,8 @@ import pytz
 from flask import jsonify, request
 import logging
 import time
-from growatt import GrowattAPI
-from azure_db import AzureDB
+from src.growatt import GrowattAPI
+from src.azure_db import AzureDB
 from ai_agent import GrowattAIAgent
 
 # Import service classes

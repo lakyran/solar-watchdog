@@ -1,6 +1,6 @@
 from flask import Flask, jsonify
 from dotenv import load_dotenv
-from watchdog import Watchdog
+from src.watchdog import Watchdog
 from datetime import datetime, timedelta
 import pytz
 from flask_jwt_extended import JWTManager

@@ -1,6 +1,0 @@
-2025-05-13 01:10:57 - Starting batch ingest plant summary job at Tue May 13 01:10:57 IST 2025
-2025-05-13 01:10:57 - Calling endpoint: https://unisolartech-watchdog-databox-bgdqfzedhnd5ecbt.centralindia-01.azurewebsites.net/plants/summary/batch-ingest
-2025-05-13 01:10:57 - Authenticating as admin...
-2025-05-13 01:10:58 - Obtained access token.
-2025-05-13 01:11:20 - Batch ingest successful. Processed 11/11 plants. Failed: 0
-2025-05-13 01:11:20 - Batch ingest plant summary job completed at Tue May 13 01:11:20 IST 2025
