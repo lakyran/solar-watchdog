@@ -7,9 +7,11 @@ The Unisolar Watchdog Service is a Flask-based monitoring and analytics platform
 
 ### Core Components
 - **Flask Application** (`app.py`) - Main web server with JWT authentication
-- **Database Layer** (`azure_db.py`) - PostgreSQL connection pool and data operations
-- **External API Client** (`growatt.py`) - Growatt API integration for device data
-- **AI Agent** (`ai_agent.py`) - Azure OpenAI integration for disruption analysis
+- **Core Modules** (`src/`) - Main business logic modules
+  - **Database Layer** (`src/azure_db.py`) - PostgreSQL connection pool and data operations
+  - **External API Client** (`src/growatt.py`) - Growatt API integration for device data
+  - **AI Agent** (`src/ai_agent.py`) - Azure OpenAI integration for disruption analysis
+  - **Watchdog Service** (`src/watchdog.py`) - Main orchestration service
 - **Service Layer** (`services/`) - Business logic organized by domain
 - **Monitoring** (`monitoring/`) - OpenTelemetry instrumentation with Azure Monitor
 
@@ -93,12 +95,39 @@ The Unisolar Watchdog Service is a Flask-based monitoring and analytics platform
 
 ## Code Organization
 
+### Project Structure
+```
+src/                    # Core business logic modules
+├── watchdog.py        # Main orchestration service
+├── azure_db.py        # Database operations
+├── growatt.py         # External API client
+└── ai_agent.py        # AI analysis service
+
+services/              # Domain-specific business services
+├── history_ingestion_service.py
+├── disruption_analysis_service.py
+├── user_management_service.py
+└── plant_management_service.py
+
+routes/                # API route handlers
+monitoring/            # OpenTelemetry instrumentation
+```
+
 ### Service Layer Pattern
 ```python
 # Services inherit from BaseService and use dependency injection
 class HistoryIngestionService(BaseService):
     def __init__(self, db_client, growatt_client, ai_agent):
         # Service initialization with dependencies
+```
+
+### Import Pattern
+```python
+# Core modules are imported from src/
+from src.watchdog import Watchdog
+from src.azure_db import AzureDB
+from src.growatt import GrowattAPI
+from src.ai_agent import GrowattAIAgent
 ```
 
 ### Monitoring Integration
@@ -134,6 +163,10 @@ class HistoryIngestionService(BaseService):
 
 ### Device Data Flow
 ```python
+# Import core modules
+from src.growatt import GrowattAPI
+from src.azure_db import AzureDB
+
 # 1. Fetch from external API
 history_data = growatt_client.fetch_device_history(device_sn, metadata, date, date)
 
@@ -146,6 +179,10 @@ result = db_client.insert_history_into_database(db_entries)
 
 ### AI Analysis Pattern
 ```python
+# Import core modules
+from src.azure_db import AzureDB
+from src.ai_agent import GrowattAIAgent
+
 # 1. Get device data
 records = db_client.get_device_records_by_date(device_sn, date)
 

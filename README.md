@@ -20,13 +20,15 @@ The solar monitoring system consists of several core components:
 
 ### Components
 1. **Flask Web Application** (`app.py`) - Provides HTTP endpoints for various functions
-2. **Watchdog Service** (`watchdog.py`) - Core business logic orchestration
+2. **Core Modules** (`src/`) - Main business logic modules
+   - **Watchdog Service** (`src/watchdog.py`) - Core business logic orchestration
+   - **Growatt API Client** (`src/growatt.py`) - Handles communication with the Growatt solar monitoring API
+   - **Azure Database Client** (`src/azure_db.py`) - Manages PostgreSQL database interactions
+   - **AI Analysis Agent** (`src/ai_agent.py`) - Analyzes solar generation data for disruptions
 3. **Service Layer** (`services/`) - Modular business logic implementation
-4. **Growatt API Client** (`growatt.py`) - Handles communication with the Growatt solar monitoring API
-5. **Azure Database Client** (`azure_db.py`) - Manages PostgreSQL database interactions
-6. **AI Analysis Agent** (`ai_agent.py`) - Analyzes solar generation data for disruptions
-7. **Automated WebJobs** - Scheduled tasks for batch operations (located in the `jobs/` directory)
-8. **Monitoring System** (`monitoring/`) - OpenTelemetry-based monitoring for API routes, services, database operations, and external API calls
+4. **API Routes** (`routes/`) - HTTP endpoint handlers
+5. **Automated WebJobs** - Scheduled tasks for batch operations (located in the `jobs/` directory)
+6. **Monitoring System** (`monitoring/`) - OpenTelemetry-based monitoring for API routes, services, database operations, and external API calls
 
 ### Service Layer
 
@@ -85,12 +87,40 @@ The system uses a PostgreSQL database with several tables:
 ### Technical Design
 
 The system follows a well-structured design pattern:
-- Service-oriented architecture with clear separation of concerns
+- **Modular Architecture**: Core business logic organized in `src/` directory
+- **Service-oriented architecture** with clear separation of concerns
+- **Import Structure**: Core modules imported with `src.` prefix for better organization
 - Robust error handling and logging throughout
 - Background task support for long-running operations
 - Timezone handling for data consistency (IST standardization)
-- Connection pooling for database efficiency
+- Connection pooling for database efficiency (5-50 connections)
 - Scheduled WebJobs for automated data processing
+
+### Project Structure
+```
+src/                    # Core business logic modules
+├── watchdog.py        # Main orchestration service
+├── azure_db.py        # Database operations and connection pooling
+├── growatt.py         # External Growatt API client
+└── ai_agent.py        # AI analysis service
+
+services/              # Domain-specific business services
+├── history_ingestion_service.py
+├── disruption_analysis_service.py
+├── user_management_service.py
+└── plant_management_service.py
+
+routes/                # API route handlers
+├── auth.py           # Authentication endpoints
+├── devices.py        # Device management endpoints
+├── plants.py         # Plant management endpoints
+├── users.py          # User management endpoints
+└── dashboard.py      # Dashboard endpoints
+
+monitoring/            # OpenTelemetry instrumentation
+jobs/                  # Automated WebJob configurations
+docs/                  # Project documentation
+```
 
 ### Recent Enhancements
 
