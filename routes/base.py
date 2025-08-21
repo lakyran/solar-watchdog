@@ -169,7 +169,7 @@ def privacy_policy():
     """Serve the privacy policy page"""
     try:
         # Read the privacy policy markdown file
-        privacy_file_path = 'privacy-policy.md'
+        privacy_file_path = 'docs/privacy-policy.md'
         
         if not os.path.exists(privacy_file_path):
             logger.error(f"Privacy policy file not found: {privacy_file_path}")
