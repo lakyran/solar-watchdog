@@ -20,7 +20,7 @@ select  datetime
 ,total_records_on_day
 from power_gen_history
 WHERE device_sn = 'BEJACFM01J'
-AND DATE(datetime) = '2025-05-14'
+AND DATE(datetime) = '2025-10-07'
 ORDER BY datetime DESC
 LIMIT 1000
 

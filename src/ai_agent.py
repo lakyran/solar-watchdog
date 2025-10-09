@@ -466,7 +466,7 @@ class GrowattAIAgent:
             # self.logger.debug(f"Full Message: {full_message}")
             
             # Create message in the thread
-            message = self.project_client.agents.create_message(
+            self.project_client.agents.create_message(
                 thread_id=thread_id,
                 role="user",
                 content=full_message
@@ -482,7 +482,29 @@ class GrowattAIAgent:
             if run.status == "failed":
                 # Check if you got "Rate limit is exceeded.", then you want to get more quota
                 self.logger.error(f"Run failed: {run.last_error}")
-            
+
+            # Log token usage details if the SDK provides them
+            usage = getattr(run, "usage", None)
+            if usage:
+                prompt_tokens = getattr(usage, "input_tokens", getattr(usage, "prompt_tokens", None))
+                completion_tokens = getattr(usage, "output_tokens", getattr(usage, "completion_tokens", None))
+                total_tokens = getattr(usage, "total_tokens", None)
+
+                usage_parts = []
+                if prompt_tokens is not None:
+                    usage_parts.append(f"input={prompt_tokens}")
+                if completion_tokens is not None:
+                    usage_parts.append(f"output={completion_tokens}")
+                if total_tokens is not None:
+                    usage_parts.append(f"total={total_tokens}")
+
+                if usage_parts:
+                    self.logger.info("Token usage (%s)", ", ".join(usage_parts))
+                else:
+                    self.logger.debug("Token usage metadata present but empty on run response")
+            else:
+                self.logger.debug("Token usage metadata not provided on run response")
+
             # Wait for the run to complete and get messages
             messages = self.project_client.agents.list_messages(thread_id=thread_id)
             

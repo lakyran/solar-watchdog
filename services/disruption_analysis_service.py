@@ -52,6 +52,28 @@ class DisruptionAnalysisService(BaseService):
                     'status': 'no_data',
                     'message': 'No data available for the requested date'
                 }
+
+            # Filter generation history for AI analysis
+            # Only include the following fields:
+            # datetime, device_type, status, ppv, pac, eac_today, vpv1, vpv2, vpv3, vac1, vac2, vac3, temperature, fault_type
+            generation_history = [
+                {
+                    'datetime': record['datetime'],
+                    'device_type': record['device_type'],
+                    'status': record['status'],
+                    'ppv': record['ppv'],
+                    'pac': record['pac'],
+                    'eac_today': record['eac_today'],
+                    'vpv1': record['vpv1'],
+                    'vpv2': record['vpv2'],
+                    'vpv3': record['vpv3'],
+                    'vac1': record['vac1'],
+                    'vac2': record['vac2'],
+                    'vac3': record['vac3'],
+                    'temperature': record['temperature'],
+                    'fault_type': record['fault_type']
+                } for record in generation_history
+            ]
             
             # Prepare analysis query
             query = f"Analyze the solar generation data for device {device_sn} on {date_str}. "
