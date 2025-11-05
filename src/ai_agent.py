@@ -1,5 +1,5 @@
 from azure.ai.projects import AIProjectClient
-from azure.identity import EnvironmentCredential
+from azure.identity import DefaultAzureCredential
 import os
 from dotenv import load_dotenv
 import json
@@ -24,7 +24,7 @@ class GrowattAIAgent:
 
         self.project_client = AIProjectClient.from_connection_string(
            conn_str=self.project_connection_string,
-           credential=EnvironmentCredential()
+           credential=DefaultAzureCredential()
         )
         
         # Setup weather API client

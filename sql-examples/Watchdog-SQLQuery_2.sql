@@ -152,10 +152,18 @@ CREATE TABLE plant_daily_generation_history (
 );
 
 
-SELECT plant_id, plant_name, max(date), max(day_energy)
+SELECT plant_id, plant_name, max(date) as date, sum(day_energy) as energy, max(last_updated_at), count(*) as days
 FROM plant_daily_generation_history
-WHERE date = '2025-05-07'
+WHERE date > '2025-10-01'
 GROUP BY plant_id, plant_name
+ORDER BY energy DESC
+
+SELECT plant_id, plant_name, date, day_energy, last_updated_at
+FROM plant_daily_generation_history
+WHERE date >= '2025-10-01'
+AND plant_name = 'vijayavani3kw'
+--GROUP BY plant_id, plant_name
+ORDER BY date desc
 
 CREATE TABLE android_device_tokens (
     token_id        UUID PRIMARY KEY,

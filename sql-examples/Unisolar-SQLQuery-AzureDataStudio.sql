@@ -19,21 +19,30 @@ select  datetime
 ,fault_type
 ,total_records_on_day
 from power_gen_history
-WHERE device_sn = 'BEJACFM01J'
-AND DATE(datetime) = '2025-10-07'
+WHERE device_sn = 'CZGBCL2141'
+AND DATE(datetime) = '2025-10-15'
 ORDER BY datetime DESC
 LIMIT 1000
 
 
-SELECT device_sn, min(user_name), max(datetime), count(*)
+SELECT device_sn, min(user_name), max(datetime) as datetime, count(*)
 from power_gen_history
 group by device_sn
+order by datetime desc
 
-SELECT device_sn, min(user_name), date(datetime) as day, count(*)
+SELECT device_sn, min(user_name), date(datetime) as day, count(*) as entries
 from power_gen_history
-where device_sn = 'BEJACFM00T'
-group by device_sn, DATE(datetime)
-order by device_sn, day
+where --device_sn = 'CLJ3BKC01Q'
+date(datetime) >= '2025-10-01'
+group by device_sn, day
+order by device_sn, day desc
+
+SELECT device_sn, min(user_name), date(datetime) as day, count(*) as entries
+from power_gen_history
+where --device_sn = 'CLJ3BKC01Q'
+date(datetime) >= '2025-10-01'
+group by device_sn, day
+order by device_sn, day desc
 
 # device_sn = 'CLJACLR001', 'CZGBCL2141', 'CZGME630L4' 
 # user_name = 'blossomcity', 'veeraiah', 'vijayavani3kw'

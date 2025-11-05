@@ -72,6 +72,7 @@ Each service encapsulates related business logic and database operations, promot
   - Batch ingest of plant summaries (every 6 minutes)
   - Batch analysis of disruptions (every 10 minutes)
   - Batch ingest of generation history (scheduled regularly)
+  - Batch ingest of plant energy daily data (every 6 hours)
 
 ### Database Schema
 
@@ -152,6 +153,9 @@ Several valuable features were recently added to the system:
 - Better tracking of analysis history through the analysis ledger
 - More accurate detection of ongoing disruptions
 - Background task management for long-running analyses
+- AI agent enhancements with token usage logging for input, output, and total tokens
+- Context pruning capabilities to reduce context size by 30% for better performance
+- Improved disruption event filtering to exclude events shorter than 30 minutes
 
 #### Comprehensive Monitoring System
 - OpenTelemetry-based monitoring for all components
@@ -171,6 +175,7 @@ Several valuable features were recently added to the system:
 - PostgreSQL database
 - Growatt API credentials
 - Azure AI credentials (for AI analysis features)
+- Testing framework (pytest) for development and testing
 
 ### Setup
 
@@ -237,6 +242,11 @@ The system includes several WebJobs for automated tasks:
 ### Batch Ingest History
 - **Purpose**: Fetches and stores generation history for all inverters
 - **Endpoint**: `/devices/history/batch-ingest`
+
+### Batch Ingest Plant Energy Daily
+- **Schedule**: Runs every 6 hours (`0 0 */6 * * *`)
+- **Purpose**: Fetches and stores daily energy generation data for all plants over a date range
+- **Endpoint**: `/plants/energy/daily/batch-ingest`
 
 ## API Routes
 
@@ -531,6 +541,8 @@ The service layer is organized as follows:
 - Manages plant-specific operations
 - Handles plant summary and energy generation data
 - Provides efficiency analysis and comparison
+- Fetches and stores daily energy generation data for plants over date ranges
+- Supports batch processing of daily energy data for all plants
 
 ## Timezone Handling
 
