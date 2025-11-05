@@ -5,6 +5,7 @@ from flask import Blueprint, jsonify, request, render_template, send_from_direct
 import logging
 import markdown
 import os
+from datetime import datetime
 
 # Set up logger
 logger = logging.getLogger(__name__)
@@ -26,6 +27,50 @@ def favicon():
 def hello():
     """Serve the welcome page"""
     return render_template('welcome.html')
+
+# Health check
+@base_bp.route('/health', methods=['GET'])
+@base_bp.route('/api/health', methods=['GET'])
+def health():
+    """Health check endpoint that verifies the /api/auth/login route is functional.
+
+    We treat HTTP 200/400/401 from the login route as "reachable" (functional route),
+    and anything 5xx or exceptions as unhealthy.
+    """
+    login_check = {
+        'reachable': False,
+        'status_code': None,
+        'message': None
+    }
+
+    try:
+        if watchdog and getattr(watchdog, 'app', None):
+            with watchdog.app.test_client() as client:
+                resp = client.post('/api/auth/login', json={})
+                login_check['status_code'] = resp.status_code
+                # Accept 200/400/401 as functional (route exists and processes request)
+                login_check['reachable'] = resp.status_code in (200, 400, 401)
+                try:
+                    data = resp.get_json(silent=True)
+                    if isinstance(data, dict) and 'message' in data:
+                        login_check['message'] = data.get('message')
+                except Exception:
+                    pass
+        else:
+            login_check['message'] = 'Watchdog app not available'
+    except Exception as e:
+        login_check['message'] = f'Exception during login check: {str(e)}'
+
+    overall_ok = bool(login_check['reachable'])
+
+    return jsonify({
+        'status': 'ok' if overall_ok else 'error',
+        'service': 'unisolar-watchdog-service',
+        'time': datetime.utcnow().isoformat() + 'Z',
+        'checks': {
+            'login_endpoint': login_check
+        }
+    }), 200 if overall_ok else 503
 
 # Disruptions view page
 @base_bp.route('/disruptions/view', methods=['GET'])
