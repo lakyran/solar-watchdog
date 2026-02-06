@@ -7,7 +7,6 @@ import os
 import logging
 import json
 from dotenv import load_dotenv
-from azure.monitor.opentelemetry import configure_azure_monitor
 from opentelemetry import trace
 from opentelemetry.sdk.resources import Resource
 from opentelemetry.sdk.trace import TracerProvider
@@ -15,13 +14,21 @@ from opentelemetry.sdk.trace.export import BatchSpanProcessor
 from opentelemetry.sdk.trace.sampling import ParentBasedTraceIdRatio
 from opentelemetry.trace.propagation.tracecontext import TraceContextTextMapPropagator
 
+# Try to import Azure Monitor, but make it optional
+try:
+    from azure.monitor.opentelemetry import configure_azure_monitor
+    AZURE_MONITOR_AVAILABLE = True
+except ImportError as e:
+    AZURE_MONITOR_AVAILABLE = False
+    logging.warning(f"Azure Monitor OpenTelemetry not available: {e}")
+
 # Load environment variables
 load_dotenv()
 
 def init_opentelemetry():
     """
     Initialize OpenTelemetry with Azure Monitor.
-    
+
     This function configures OpenTelemetry to send telemetry data to Azure Monitor.
     It uses the connection string from environment variables and sets up proper sampling.
     """
@@ -32,18 +39,23 @@ def init_opentelemetry():
     logging.getLogger('azure.monitor').setLevel(logging.WARNING)
     logging.getLogger('azure.identity').setLevel(logging.WARNING)
     logging.getLogger('opentelemetry').setLevel(logging.WARNING)
-    
+
     connection_string = os.getenv("APPLICATIONINSIGHTS_CONNECTION_STRING")
     env = os.getenv("ENV", "DEVELOPMENT").upper()
-    
+
     if not connection_string:
         print("WARNING: No Application Insights connection string found. OpenTelemetry will not send data to Azure Monitor.")
         return
-    
+
+    # Check if Azure Monitor is available
+    if not AZURE_MONITOR_AVAILABLE:
+        print(f"WARNING: Azure Monitor OpenTelemetry package is not available. Telemetry will not be sent to Azure Monitor.")
+        return
+
     # Skip Azure Monitor in development if connection fails
     if env == "DEVELOPMENT":
         print("Development mode: Azure Monitor telemetry is optional")
-    
+
     # Define specific instrumentors to use
     instrumentations = [
         "flask",      # Flask web framework
@@ -51,10 +63,10 @@ def init_opentelemetry():
         "urllib",     # URL handling
         "urllib3"     # HTTP client
     ]
-    
+
     # Suppress warnings about Django instrumentation
     logging.getLogger('azure.monitor.opentelemetry._configure').setLevel(logging.ERROR)
-    
+
     try:
         # Configure Azure Monitor with OpenTelemetry
         configure_azure_monitor(
@@ -67,7 +79,7 @@ def init_opentelemetry():
             # Disable auto-instrumentation to prevent the Django error
             auto_instrumentation=False
         )
-        
+
         print("OpenTelemetry initialized with Azure Monitor")
     except Exception as e:
         if env == "DEVELOPMENT":
