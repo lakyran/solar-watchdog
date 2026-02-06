@@ -49,14 +49,15 @@ CREATE TABLE users (
 SELECT user_name FROM users
 
 CREATE TABLE plants (
-    plant_id           VARCHAR NOT NULL,
+    plant_id      VARCHAR NOT NULL,
     plant_name    VARCHAR,
     user_name     VARCHAR NOT NULL,
-    user_id            VARCHAR,
-    vendor             VARCHAR NOT NULL,
-    city                   VARCHAR NOT NULL,
-    latitude            FLOAT NOT NULL,
-    longitude         FLOAT NOT NULL,
+    user_id       VARCHAR,
+    created_date  DATE,
+    vendor        VARCHAR NOT NULL,
+    city          VARCHAR NOT NULL,
+    latitude      VARCHAR NOT NULL,
+    longitude     VARCHAR NOT NULL,
     peak_power    FLOAT NOT NULL,
 
     PRIMARY KEY (plant_id, vendor)
@@ -161,7 +162,7 @@ ORDER BY energy DESC
 SELECT plant_id, plant_name, date, day_energy, last_updated_at
 FROM plant_daily_generation_history
 WHERE date >= '2025-10-01'
-AND plant_name = 'vijayavani3kw'
+AND plant_name = 'veeraiah'
 --GROUP BY plant_id, plant_name
 ORDER BY date desc
 

@@ -1205,7 +1205,8 @@ class AzureDB:
                 cursor.execute(
                     """
                     SELECT plant_id, plant_name, user_name, user_id, vendor, city, 
-                           latitude, longitude, peak_power
+                           latitude, longitude, peak_power,
+                           TO_CHAR(created_date, 'YYYY-MM-DD') as created_date
                     FROM plants
                     WHERE LOWER(user_name) = LOWER(%s)
                     ORDER BY plant_name, plant_id
@@ -1218,7 +1219,8 @@ class AzureDB:
                 cursor.execute(
                     """
                     SELECT plant_id, plant_name, user_name, user_id, vendor, city, 
-                           latitude, longitude, peak_power
+                           latitude, longitude, peak_power,
+                           TO_CHAR(created_date, 'YYYY-MM-DD') as created_date
                     FROM plants
                     ORDER BY user_name, plant_name, plant_id
                     """
@@ -1638,12 +1640,17 @@ class AzureDB:
             
             self.logger.info(f"Inserting plant with ID: {plant_data['plant_id']}, Name: {plant_data.get('plant_name', 'N/A')}")
             
+            # Get current date for created_date if not provided in plant_data
+            created_date = plant_data.get('created_date')
+            if not created_date:
+                created_date = self.get_current_time_ist().date()
+            
             # Insert plant into database table
             cursor.execute(
                 """
                 INSERT INTO plants
-                (plant_id, plant_name, user_name, user_id, vendor, city, latitude, longitude, peak_power)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                (plant_id, plant_name, user_name, user_id, vendor, city, latitude, longitude, peak_power, created_date)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 ON CONFLICT (plant_id, vendor) DO UPDATE
                 SET plant_name = EXCLUDED.plant_name,
                     user_name = EXCLUDED.user_name,
@@ -1662,7 +1669,8 @@ class AzureDB:
                     plant_data['city'],
                     plant_data['latitude'],
                     plant_data['longitude'],
-                    plant_data['peak_power']
+                    plant_data['peak_power'],
+                    created_date
                 )
             )
             

@@ -185,6 +185,7 @@ class UserManagementService(BaseService):
                     'plant_name': plant_name,
                     'user_name': username,
                     'user_id': user_id,
+                    'created_date': plant.get('create_date', None),
                     'vendor': vendor,
                     'city': plant.get('city', ''),
                     'latitude': plant.get('latitude', '0.0'),
