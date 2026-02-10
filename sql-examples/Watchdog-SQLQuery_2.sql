@@ -46,7 +46,9 @@ CREATE TABLE users (
     PRIMARY KEY (user_id, user_name, vendor)
 );
 
-SELECT user_name FROM users
+SELECT * FROM users
+
+DELETE FROM users WHERE user_name='vijayavani3kw' AND vendor = 'dhruthifoods'
 
 CREATE TABLE plants (
     plant_id      VARCHAR NOT NULL,
@@ -64,6 +66,9 @@ CREATE TABLE plants (
 );
 
 SELECT * FROM plants
+
+SELECT * FROM plants WHERE plant_id = '9990803';
+UPDATE plants SET created_date = '2024-11-29' WHERE plant_id = '9904895'
 
 CREATE TABLE inverters (
     device_sn       VARCHAR NOT NULL,

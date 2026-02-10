@@ -32,7 +32,7 @@ order by datetime desc
 
 SELECT device_sn, min(user_name), date(datetime) as day, count(*) as entries
 from power_gen_history
-where --device_sn = 'CLJ3BKC01Q'
+where device_sn = 'CZGME630L4' and
 date(datetime) >= '2025-10-01'
 group by device_sn, day
 order by device_sn, day desc

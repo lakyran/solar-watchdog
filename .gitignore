@@ -44,3 +44,7 @@ unisolar_env/
 
 # Workspace
 *.code-workspace
+
+# Claude Code
+CLAUDE.md
+.mcp.json
