@@ -1,4 +1,8 @@
-ENV=DEVELOPMENT
+#ENV=DEVELOPMENT
+
+# Flask Configuration
+FLASK_APP=app.py
+FLASK_ENV=development
 
 # JWT Auth Configuration
 JWT_SECRET_KEY=<JWT_SECRET_KEY>
