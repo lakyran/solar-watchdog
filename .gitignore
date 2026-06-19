@@ -50,5 +50,8 @@ unisolar_env/
 CLAUDE.md
 .mcp.json
 
+# Generated reports (gap reports from scripts/check_*_gaps.py, etc.)
+reports/
+
 # OS
 .DS_Store
