@@ -19,6 +19,7 @@ class HistoryIngestionService(BaseService):
             dict: Response containing operation results
         """
         try:
+            user_name = None
             today = self.get_current_time_ist()
 
             # Get device metadata from inverter records
@@ -30,6 +31,9 @@ class HistoryIngestionService(BaseService):
                 self.logger.warning(error_msg)
                 raise Exception(error_msg)
 
+            # Extract user_name from inverter metadata for traceability in subsequent logs
+            user_name = inverter_metadata.get('user_name', '')
+
             dont_change_date = True
             # If date not provided, fetch the date of the last record in the database. If no records, then use today
             if not date_str:
@@ -37,29 +41,29 @@ class HistoryIngestionService(BaseService):
                 last_record_date = self.db_client.get_last_record_date_for_device(device_sn)
                 if last_record_date:
                     date_str = last_record_date
-                    self.logger.info(f"Last record date found for device {device_sn}: {last_record_date}")
+                    self.logger.info(f"Last record date found for device {device_sn} (user: {user_name}): {last_record_date}")
                 else:
                     date_str = today.strftime('%Y-%m-%d')
-                    self.logger.info(f"No last record date found for device {device_sn}, using today's date: {date_str}")
+                    self.logger.info(f"No last record date found for device {device_sn} (user: {user_name}), using today's date: {date_str}")
 
             # Get records from db for device and date
             records = self.db_client.get_device_records_by_date(device_sn=device_sn, date=date_str)
             records_count = len(records)
-            self.logger.info(f"Records count for device {device_sn} on {date_str}: {len(records)}")
+            self.logger.info(f"Records count for device {device_sn} (user: {user_name}) on {date_str}: {len(records)}")
 
             # Get the total records on day from the first record
             if records_count > 0:
                 total_records_on_day = records[0]['total_records_on_day']
-                self.logger.info(f"Total records on day {date_str} for device {device_sn}: {total_records_on_day}")
+                self.logger.info(f"Total records on day {date_str} for device {device_sn} (user: {user_name}): {total_records_on_day}")
 
             # If records exist and overwrite is True, then first delete the records for the device and date
             if records_count > 0 and overwrite:
-                self.logger.info(f"Deleting records for device {device_sn} on {date_str}")
+                self.logger.info(f"Deleting records for device {device_sn} (user: {user_name}) on {date_str}")
                 db_result = self.db_client.delete_device_records_by_date(device_sn=device_sn, date=date_str)
                 if db_result['status'] == 'success':
-                    self.logger.info(f"Deleted {db_result['deleted_records']} records for device {device_sn} on {date_str}")
+                    self.logger.info(f"Deleted {db_result['deleted_records']} records for device {device_sn} (user: {user_name}) on {date_str}")
                 else:
-                    error_msg = f"Error deleting records for device {device_sn} on {date_str}: {db_result['message']}"
+                    error_msg = f"Error deleting records for device {device_sn} (user: {user_name}) on {date_str}: {db_result['message']}"
                     self.logger.error(error_msg)
                     raise Exception(error_msg)
 
@@ -68,7 +72,7 @@ class HistoryIngestionService(BaseService):
 
             # If not overwrite, and date is not today, and records count is equal to total records on day, then skip fetch and store
             if records_count > 0 and dont_change_date and records_count == total_records_on_day and not overwrite and date_str != today.strftime('%Y-%m-%d'):
-                self.logger.info(f"All records for device {device_sn} on {date_str} already exist, skipping fetch and store")
+                self.logger.info(f"All records for device {device_sn} (user: {user_name}) on {date_str} already exist, skipping fetch and store")
                 response = {
                     'device_id': device_sn,
                     'date': date_str,
@@ -84,7 +88,7 @@ class HistoryIngestionService(BaseService):
                 date_obj = date_obj.replace(tzinfo=self.ist_timezone)
                 date_str = (date_obj + timedelta(days=1)).strftime('%Y-%m-%d')
                 records_count = 0
-                self.logger.info(f"Date changed to {date_str} for device {device_sn}")
+                self.logger.info(f"Date changed to {date_str} for device {device_sn} (user: {user_name})")
 
             # Set page number to fetch
             # Page 1: 1 to 100, Page 2: 101 to 200, Page 3: 201 to 300, etc.
@@ -97,9 +101,9 @@ class HistoryIngestionService(BaseService):
                 page = page + 1
 
                 # Fetch history for yesterday
-                self.logger.info(f"Fetching history for device {device_sn} on {date_str} and page {page}")
+                self.logger.info(f"Fetching history for device {device_sn} (user: {user_name}) on {date_str} and page {page}")
                 history_data = self.growatt_client.fetch_device_history(device_sn, inverter_metadata, date_str, date_str, page)
-                self.logger.info(f"History data fetched - current_count: {len(history_data['datas'])}, total_count: {history_data['count']} records on {date_str} for device {device_sn}")
+                self.logger.info(f"History data fetched - current_count: {len(history_data['datas'])}, total_count: {history_data['count']} records on {date_str} for device {device_sn} (user: {user_name})")
                 
                 if len(history_data['datas']) == 0:
                     break
@@ -107,17 +111,17 @@ class HistoryIngestionService(BaseService):
                 database_entries = []
                 db_result = None
                 if store_records:
-                    self.logger.info(f"Preparing to store records for device {device_sn} on {date_str}")
+                    self.logger.info(f"Preparing to store records for device {device_sn} (user: {user_name}) on {date_str}")
                     # Process history data into database entries
                     database_entries = self.growatt_client.process_history_data_for_db(history_data, device_sn, date_str, inverter_metadata)
 
                     # Insert processed entries into database
-                    self.logger.info(f"Storing {len(database_entries)} records for device {device_sn} on {date_str}")
+                    self.logger.info(f"Storing {len(database_entries)} records for device {device_sn} (user: {user_name}) on {date_str}")
                     db_result = self.db_client.insert_history_into_database(database_entries)
                     all_database_entries.extend(database_entries)
                     all_db_results.append(db_result)
                 else:
-                    self.logger.info(f"Not storing records for device {device_sn} on {date_str}")
+                    self.logger.info(f"Not storing records for device {device_sn} (user: {user_name}) on {date_str}")
 
             response = {
                 'device_id': device_sn,
@@ -133,7 +137,7 @@ class HistoryIngestionService(BaseService):
             self.logger.error(error_msg)
             return {'error': error_msg}, 400
         except Exception as e:
-            error_msg = f"Error processing history for {device_sn}: {str(e)}"
+            error_msg = f"Error processing history for device {device_sn} (user: {user_name}): {str(e)}"
             self.logger.error(error_msg)
             return {'error': error_msg}, 500
             

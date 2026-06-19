@@ -49,3 +49,6 @@ unisolar_env/
 # Claude Code
 CLAUDE.md
 .mcp.json
+
+# OS
+.DS_Store

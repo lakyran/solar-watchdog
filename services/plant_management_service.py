@@ -113,6 +113,7 @@ class PlantManagementService(BaseService):
             dict: Result containing API data and database operation result
         """
         try:
+            user_name = None
             self.logger.info(f"Fetching and storing energy summary for plant: {plant_id}")
             
             # Validate plant_id
@@ -126,7 +127,6 @@ class PlantManagementService(BaseService):
             api_summary = self.growatt_client.fetch_plant_summary(plant_id)
             
             # Initialize variables for required metadata
-            user_name = None
             vendor = None
             plant_name = None
             peak_power = float(api_summary.get('peak_power_actual', 0))
@@ -155,7 +155,7 @@ class PlantManagementService(BaseService):
                 return {"status": "error", "message": error_msg}, 400
             
             # Step 3: Prepare data and insert/update in the database
-            self.logger.info(f"Step 3: Preparing and storing plant summary for plant_id: {plant_id}")
+            self.logger.info(f"Step 3: Preparing and storing plant summary for plant_id: {plant_id} (user: {user_name})")
             plant_data = {
                 'plant_id': plant_id,
                 'plant_name': plant_name or '',
@@ -194,7 +194,7 @@ class PlantManagementService(BaseService):
             self.logger.error(error_msg)
             return {"status": "error", "message": error_msg}, 400
         except Exception as e:
-            error_msg = f"Error processing plant summary for {plant_id}: {str(e)}"
+            error_msg = f"Error processing plant summary for plant {plant_id} (user: {user_name}): {str(e)}"
             self.logger.error(error_msg)
             return {"status": "error", "message": error_msg}, 500
     
@@ -211,6 +211,7 @@ class PlantManagementService(BaseService):
             dict: Result containing operation status and database result
         """
         try:
+            user_name = None
             # Set default dates if not provided
             current_time = self.get_current_time_ist()
             if not end_date:
@@ -249,7 +250,7 @@ class PlantManagementService(BaseService):
                 end_date_obj = datetime.strptime(end_date, '%Y-%m-%d')
                 days_difference = (end_date_obj - start_date_obj).days + 1  # Include both start and end dates
                 
-                self.logger.info(f"Processing date range of {days_difference} days using chunking approach")
+                self.logger.info(f"Processing date range of {days_difference} days using chunking approach for plant {plant_id} (user: {user_name})")
                 
                 # Initialize tracking variables
                 all_energy_entries = []
@@ -267,12 +268,12 @@ class PlantManagementService(BaseService):
                     chunk_start_str = current_start.strftime('%Y-%m-%d')
                     chunk_end_str = chunk_end.strftime('%Y-%m-%d')
                     
-                    self.logger.info(f"Processing chunk {chunk_count}: {chunk_start_str} to {chunk_end_str}")
+                    self.logger.info(f"Processing chunk {chunk_count}: {chunk_start_str} to {chunk_end_str} for plant {plant_id} (user: {user_name})")
                     
                     # Fetch data for this chunk
                     try:
                         # Call API for this date range chunk
-                        self.logger.info(f"Calling Growatt API to fetch energy data for plant {plant_id}, chunk {chunk_count}")
+                        self.logger.info(f"Calling Growatt API to fetch energy data for plant {plant_id} (user: {user_name}), chunk {chunk_count}")
                         energy_data = self.growatt_client.fetch_plant_energy_data(
                             plant_id=plant_id,
                             start_date=chunk_start_str,
@@ -280,7 +281,7 @@ class PlantManagementService(BaseService):
                         )
                         
                         if energy_data:
-                            self.logger.info(f"Received {len(energy_data)} entries for chunk {chunk_count}")
+                            self.logger.info(f"Received {len(energy_data)} entries for plant {plant_id} (user: {user_name}), chunk {chunk_count}")
                             
                             # Format the data for database insertion
                             chunk_entries = []
@@ -301,17 +302,17 @@ class PlantManagementService(BaseService):
                             
                             # Insert entries for this chunk into the database
                             if chunk_entries:
-                                self.logger.info(f"Inserting {len(chunk_entries)} entries for chunk {chunk_count}")
+                                self.logger.info(f"Inserting {len(chunk_entries)} entries for plant {plant_id} (user: {user_name}), chunk {chunk_count}")
                                 chunk_db_result = self.db_client.insert_plant_daily_generation_history(chunk_entries)
                                 db_results.append(chunk_db_result)
                                 all_energy_entries.extend(chunk_entries)
-                                self.logger.info(f"Chunk {chunk_count} database operation completed: inserted={chunk_db_result.get('inserted_records', 0)}, updated={chunk_db_result.get('updated_records', 0)}")
+                                self.logger.info(f"Chunk {chunk_count} database operation completed for plant {plant_id} (user: {user_name}): inserted={chunk_db_result.get('inserted_records', 0)}, updated={chunk_db_result.get('updated_records', 0)}")
                             
                         else:
-                            self.logger.warning(f"No data received for chunk {chunk_count}")
+                            self.logger.warning(f"No data received for plant {plant_id} (user: {user_name}), chunk {chunk_count}")
                         
                     except Exception as chunk_error:
-                        self.logger.error(f"Error processing chunk {chunk_count}: {str(chunk_error)}")
+                        self.logger.error(f"Error processing chunk {chunk_count} for plant {plant_id} (user: {user_name}): {str(chunk_error)}")
                         # Continue with the next chunk
                     
                     # Move to the next chunk
@@ -324,7 +325,7 @@ class PlantManagementService(BaseService):
                 total_inserted = sum(result.get('inserted_records', 0) for result in db_results if isinstance(result, dict))
                 total_updated = sum(result.get('updated_records', 0) for result in db_results if isinstance(result, dict))
                 
-                self.logger.info(f"All chunks processed. Total entries: {len(all_energy_entries)}, inserted: {total_inserted}, updated: {total_updated}")
+                self.logger.info(f"All chunks processed for plant {plant_id} (user: {user_name}). Total entries: {len(all_energy_entries)}, inserted: {total_inserted}, updated: {total_updated}")
                 
                 # Return combined results
                 if not all_energy_entries:
@@ -359,7 +360,7 @@ class PlantManagementService(BaseService):
                 return {"status": "error", "message": error_msg}, 400
             
         except Exception as e:
-            error_msg = f"Error fetching and storing plant generation data for {plant_id}: {str(e)}"
+            error_msg = f"Error fetching and storing plant generation data for plant {plant_id} (user: {user_name}): {str(e)}"
             self.logger.error(error_msg)
             return {"status": "error", "message": error_msg}, 500
     
