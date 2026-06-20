@@ -140,7 +140,178 @@ class HistoryIngestionService(BaseService):
             error_msg = f"Error processing history for device {device_sn} (user: {user_name}): {str(e)}"
             self.logger.error(error_msg)
             return {'error': error_msg}, 500
-            
+
+    def fetch_and_store_device_generation_history_range(self, device_sn, start_date, end_date, overwrite=False, store_records=True):
+        """
+        Fetch and store generation history for a device over a range of dates.
+
+        Iterates day by day from start_date to end_date (inclusive), calling
+        fetch_and_store_device_generation_history for each date.
+
+        Args:
+            device_sn (str): Device serial number
+            start_date (str): Start date in YYYY-MM-DD format
+            end_date (str): End date in YYYY-MM-DD format
+            overwrite (bool, optional): Whether to overwrite existing records. Defaults to False.
+            store_records (bool, optional): Whether to store records in the database. Defaults to True.
+
+        Returns:
+            dict: Summary of the ingestion process including per-day results
+        """
+        try:
+            # Initialized to None so the outer except can still reference it if resolution fails
+            user_name = None
+
+            # Resolve user_name from inverter metadata for traceability in subsequent logs.
+            # Raises if no inverter record exists for the device.
+            user_name = self._get_user_name_for_device(device_sn)
+
+            self.logger.info(f"Starting history ingestion over range for device {device_sn} (user: {user_name}): "
+                            f"{start_date} to {end_date} (overwrite={overwrite}, store_records={store_records})")
+
+            # Parse and validate the date range
+            try:
+                start_date_obj = datetime.strptime(start_date, '%Y-%m-%d')
+                end_date_obj = datetime.strptime(end_date, '%Y-%m-%d')
+            except (ValueError, TypeError):
+                error_msg = (f"Invalid date format for device {device_sn} (user: {user_name}): "
+                             f"start_date={start_date}, end_date={end_date}. Expected YYYY-MM-DD.")
+                self.logger.error(error_msg)
+                return {'status': 'error', 'device_sn': device_sn, 'message': error_msg}, 400
+
+            if start_date_obj > end_date_obj:
+                error_msg = (f"start_date ({start_date}) must be on or before end_date ({end_date}) "
+                             f"for device {device_sn} (user: {user_name})")
+                self.logger.error(error_msg)
+                return {'status': 'error', 'device_sn': device_sn, 'message': error_msg}, 400
+
+            # Summary to track progress
+            summary = {
+                'device_sn': device_sn,
+                'start_date': start_date,
+                'end_date': end_date,
+                'overwrite': overwrite,
+                'store_records': store_records,
+                'days_processed': 0,
+                'days_total': (end_date_obj - start_date_obj).days + 1,
+                'days_with_data': 0,
+                'days_skipped': 0,
+                'days_failed': 0,
+                'days_details': []
+            }
+
+            # Process each day in the range
+            current_date = start_date_obj
+            while current_date <= end_date_obj:
+                date_str = current_date.strftime('%Y-%m-%d')
+                self.logger.info(f"Ingesting history for device {device_sn} (user: {user_name}) on {date_str}")
+
+                try:
+                    result = self.fetch_and_store_device_generation_history(
+                        device_sn=device_sn,
+                        date_str=date_str,
+                        overwrite=overwrite,
+                        store_records=store_records
+                    )
+
+                    # Initialize day summary with just the date
+                    day_summary = {'date': date_str}
+
+                    # Check if it's a tuple with an error
+                    if isinstance(result, tuple) and len(result) > 1:
+                        error_data, _ = result
+                        day_summary['status'] = 'error'
+                        if isinstance(error_data, dict):
+                            day_summary['error'] = error_data.get('error', 'Unknown error')
+                        else:
+                            day_summary['error'] = str(error_data)
+                        summary['days_failed'] += 1
+                        summary['days_details'].append(day_summary)
+
+                        # Stop the range ingestion on Growatt rate limit to avoid burning further requests
+                        if isinstance(error_data, dict) and 'error_frequently_access' in error_data.get('error', ''):
+                            self.logger.warning(f"API rate limit hit for device {device_sn} (user: {user_name}). Stopping range ingestion.")
+                            summary['status'] = 'rate_limited'
+                            break
+                    else:
+                        # For normal dictionary responses
+                        day_summary['status'] = result.get('status', 'unknown')
+
+                        if day_summary['status'] == 'success':
+                            day_summary['entries_count'] = result.get('entries_count', 0)
+                            summary['days_with_data'] += 1
+                        elif day_summary['status'] == 'skipped':
+                            summary['days_skipped'] += 1
+
+                        summary['days_details'].append(day_summary)
+
+                except Exception as e:
+                    self.logger.error(f"Error ingesting history for device {device_sn} (user: {user_name}) on {date_str}: {str(e)}")
+                    summary['days_failed'] += 1
+                    summary['days_details'].append({
+                        'date': date_str,
+                        'status': 'error',
+                        'error': str(e)
+                    })
+
+                # Move to next day
+                current_date += timedelta(days=1)
+                summary['days_processed'] += 1
+
+                # Add sleep to avoid hammering the API
+                time.sleep(1)
+
+            # Add overall status if not already set (e.g. rate_limited)
+            if 'status' not in summary:
+                if summary['days_failed'] > 0:
+                    summary['status'] = 'partial'
+                elif summary['days_with_data'] > 0:
+                    summary['status'] = 'success'
+                else:
+                    summary['status'] = 'no_data'
+
+            self.logger.info(f"Completed range ingestion for device {device_sn} (user: {user_name}): "
+                            f"Processed {summary['days_processed']}/{summary['days_total']} days, "
+                            f"Found data for {summary['days_with_data']} days, "
+                            f"Skipped {summary['days_skipped']} days, "
+                            f"Failed {summary['days_failed']} days")
+
+            return summary
+
+        except Exception as e:
+            error_msg = f"Error ingesting history over range for device {device_sn} (user: {user_name}): {str(e)}"
+            self.logger.error(error_msg)
+            return {
+                'status': 'error',
+                'device_sn': device_sn,
+                'message': error_msg
+            }, 500
+
+    def _get_user_name_for_device(self, device_sn):
+        """
+        Resolve the user_name associated with a device from its inverter metadata.
+
+        Used for traceability in logs. The lookup is intentionally lightweight — it
+        only reads the user_name and does not validate device fitness for ingestion.
+
+        Args:
+            device_sn (str): Device serial number
+
+        Returns:
+            str: The user_name (empty string if the record exists but has no user_name).
+
+        Raises:
+            Exception: If no inverter record exists for the device.
+        """
+        self.logger.info(f"Fetching inverter record for device metadata: {device_sn}")
+        inverter_metadata = self.db_client.get_inverter_record(device_sn)
+        if not inverter_metadata:
+            error_msg = f"No inverter record found for device {device_sn}, cannot resolve user_name"
+            self.logger.warning(error_msg)
+            raise Exception(error_msg)
+        
+        return inverter_metadata.get('user_name', '')
+
     def bootstrap_history_ingestion_for_new_user(self, device_sn):
         """
         Bootstrap historical data ingestion for a newly onboarded inverter.

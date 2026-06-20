@@ -158,7 +158,7 @@ CREATE TABLE plant_daily_generation_history (
 );
 
 
-SELECT plant_id, plant_name, max(date) as date, sum(day_energy) as energy, max(last_updated_at), count(*) as days
+SELECT plant_id, plant_name, max(date) as date, round(sum(day_energy)) as energy, max(last_updated_at), count(*) as days
 FROM plant_daily_generation_history
 WHERE date > '2025-10-01'
 GROUP BY plant_id, plant_name

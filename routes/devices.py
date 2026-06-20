@@ -182,18 +182,67 @@ def ingest_device_generation_history():
         date = request.args.get('date', None)
         overwrite = request.args.get('overwrite', False)
         store_records = request.args.get('store_records', False)
-        
+
         # Validate that both parameters are provided
         if not device_sn:
             return jsonify({'status': 'error', 'message': 'device_sn parameter is required'}), 400
-            
+
         # Check access to the device
         access_check = check_device_access(device_sn)
         if access_check:
             return access_check
-            
+
         response = watchdog.fetch_and_store_device_generation_history(device_sn, date, overwrite, store_records)
         return jsonify(response)
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+@devices_bp.route('/history/ingest/range', methods=['GET'])
+@jwt_required()
+def ingest_device_generation_history_range():
+    """Ingest device generation history from Growatt API into the database over a range of dates"""
+    try:
+        # Get parameters from request
+        device_sn = request.args.get('device_sn')
+        start_date = request.args.get('start_date')
+        end_date = request.args.get('end_date')
+        overwrite = request.args.get('overwrite', 'false')
+        if overwrite.lower() == 'true':
+            overwrite = True
+        else:
+            overwrite = False
+        store_records = request.args.get('store_records', 'true')
+        if store_records.lower() == 'false':
+            store_records = False
+        else:
+            store_records = True
+
+        # Validate required parameters
+        if not device_sn:
+            return jsonify({'status': 'error', 'message': 'device_sn parameter is required'}), 400
+        if not start_date:
+            return jsonify({'status': 'error', 'message': 'start_date parameter is required'}), 400
+        if not end_date:
+            return jsonify({'status': 'error', 'message': 'end_date parameter is required'}), 400
+
+        # Check access to the device
+        access_check = check_device_access(device_sn)
+        if access_check:
+            return access_check
+
+        result = watchdog.fetch_and_store_device_generation_history_range(
+            device_sn=device_sn,
+            start_date=start_date,
+            end_date=end_date,
+            overwrite=overwrite,
+            store_records=store_records
+        )
+
+        # If the result is a tuple with a status code (validation error), handle it
+        if isinstance(result, tuple) and len(result) > 1:
+            return jsonify(result[0]), result[1]
+
+        return jsonify(result)
     except Exception as e:
         return jsonify({'status': 'error', 'message': str(e)}), 500
 

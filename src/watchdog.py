@@ -112,6 +112,16 @@ class Watchdog:
             overwrite=overwrite,
             store_records=store_records
         )
+
+    def fetch_and_store_device_generation_history_range(self, device_sn, start_date, end_date, overwrite=False, store_records=True):
+        """Fetch and store generation history for a device over a range of dates"""
+        return self.history_service.fetch_and_store_device_generation_history_range(
+            device_sn=device_sn,
+            start_date=start_date,
+            end_date=end_date,
+            overwrite=overwrite,
+            store_records=store_records
+        )
     
     def get_device_history_records(self, device_sn=None, plant_id=None, date_str=None):
         """Get history records for a device or plant and date from the database"""
