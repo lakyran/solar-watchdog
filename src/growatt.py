@@ -228,16 +228,30 @@ class GrowattAPI:
         """
         database_entries = []
         total_records_on_day = 0
+        DAYS_TO_CONSIDER_VERY_OLD_DATE = 60
         
         if 'count' in history_data:
             total_records_on_day = history_data['count']
             self.logger.info(f"Total records on day {date_str} for device {device_sn}: {total_records_on_day}")
         
+        # Handle the case of very old dates where the source has purged the data.
+        # If the API returns no records for a date older than two months, build a
+        # single dummy entry so the gap checker and the ingestion skip-logic treat
+        # the day as already handled (total_records_on_day = -1 sentinel).
+        if ('datas' in history_data
+                and len(history_data['datas']) == 0
+                and history_data.get('count', 0) == 0
+                and date_str < (self.get_current_time_ist() - timedelta(days = DAYS_TO_CONSIDER_VERY_OLD_DATE)).strftime('%Y-%m-%d')):
+            self.logger.info(f"No data from source for old date {date_str} (device {device_sn}); building dummy entry")
+            dummy_entry = self._create_dummy_history_entry(device_sn, date_str, device_metadata)
+            database_entries.append(dummy_entry)
+            return database_entries;
+
         # Extract relevant data from history_data
         if 'datas' in history_data and isinstance(history_data['datas'], list):
             for entry in history_data['datas']:
                 # Transform each entry to include only necessary fields based on device type
-                transformed_entry = self.transform_history_entry_by_device_type(entry, device_metadata['device_type'])
+                transformed_entry = self._transform_history_entry_by_device_type(entry, device_metadata['device_type'])
                 
                 # Parse datetime and ensure it has IST timezone
                 datetime_str = entry.get('time', '')
@@ -278,8 +292,51 @@ class GrowattAPI:
                 database_entries.append(db_entry)
         
         return database_entries
-        
-    def transform_history_entry_by_device_type(self, entry, device_type):
+
+    def _create_dummy_history_entry(self, device_sn, date_str, device_metadata):
+        """
+        Build a placeholder power_gen_history entry for a date whose data has been
+        purged from the source (very old dates for which the Growatt API returns
+        no records).
+
+        The entry uses status = 'dummy' and total_records_on_day = -1. The -1
+        matches the TOTAL_RECORDS_ON_DAY_FOR_OLD_DATE sentinel in the ingestion
+        service, which makes its skip-logic treat the old date as fully ingested
+        so the day is never re-fetched, and ensures the gap checker sees a record.
+
+        Args:
+            device_sn (str): Device serial number
+            date_str (str): Date string in YYYY-MM-DD format
+            device_metadata (dict): Device metadata containing vendor, device_oem,
+                user_name, plant_id and device_type
+
+        Returns:
+            dict: A single database-ready dummy entry
+        """
+        return {
+            'datetime': f'{date_str} 00:00:00',
+            'vendor': device_metadata['vendor'],
+            'device_oem': device_metadata['device_oem'],
+            'user_name': device_metadata['user_name'],
+            'plant_id': device_metadata['plant_id'],
+            'device_sn': device_sn,
+            'device_type': device_metadata['device_type'],
+            'status': 'dummy',
+            'ppv': 0,
+            'pac': 0,
+            'eacToday': 0,
+            'vpv1': 0,
+            'vpv2': 0,
+            'vpv3': 0,
+            'vac1': 0,
+            'vac2': 0,
+            'vac3': 0,
+            'temperature': 0,
+            'faultType': 0,
+            'total_records_on_day': 1
+        }
+
+    def _transform_history_entry_by_device_type(self, entry, device_type):
         """
         Transform an entry from the Growatt API based on device type
         

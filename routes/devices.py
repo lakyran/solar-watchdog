@@ -180,8 +180,17 @@ def ingest_device_generation_history():
         # Get device_sn and date from request data
         device_sn = request.args.get('device_sn')
         date = request.args.get('date', None)
-        overwrite = request.args.get('overwrite', False)
-        store_records = request.args.get('store_records', False)
+        overwrite = request.args.get('overwrite', 'false')
+        if overwrite.lower() == 'true':
+            overwrite = True
+        else:
+            overwrite = False
+        
+        store_records = request.args.get('store_records', 'false')
+        if store_records.lower() == 'true':
+            store_records = True
+        else:
+            store_records = False
 
         # Validate that both parameters are provided
         if not device_sn:
@@ -211,11 +220,19 @@ def ingest_device_generation_history_range():
             overwrite = True
         else:
             overwrite = False
-        store_records = request.args.get('store_records', 'true')
-        if store_records.lower() == 'false':
-            store_records = False
-        else:
+        
+        store_records = request.args.get('store_records', 'false')
+        if store_records.lower() == 'true':
             store_records = True
+        else:
+            store_records = False
+        
+        # Add a log to print the input values
+        logger.info(
+            f"ingest_device_generation_history_range inputs - "
+            f"device_sn={device_sn}, start_date={start_date}, end_date={end_date}, "
+            f"overwrite={overwrite}, store_records={store_records}"
+        )
 
         # Validate required parameters
         if not device_sn:

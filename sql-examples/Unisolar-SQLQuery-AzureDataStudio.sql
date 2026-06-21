@@ -20,10 +20,9 @@ select  datetime
 ,total_records_on_day
 from power_gen_history
 WHERE device_sn = 'CZGBCL2141'
-AND DATE(datetime) = '2025-10-15'
+AND DATE(datetime) = '2025-10-31'
 ORDER BY datetime DESC
 LIMIT 1000
-
 
 SELECT device_sn, min(user_name), max(datetime) as datetime, count(*)
 from power_gen_history
@@ -39,8 +38,8 @@ order by device_sn, day desc
 
 SELECT device_sn, min(user_name), date(datetime) as day, count(*) as entries
 from power_gen_history
-where --device_sn = 'CLJ3BKC01Q'
-date(datetime) >= '2025-10-01'
+where device_sn = 'CZGBCL2141' and
+date(datetime) >= '2025-11-01'
 group by device_sn, day
 order by device_sn, day desc
 

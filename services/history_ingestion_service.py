@@ -56,6 +56,9 @@ class HistoryIngestionService(BaseService):
                 total_records_on_day = records[0]['total_records_on_day']
                 self.logger.info(f"Total records on day {date_str} for device {device_sn} (user: {user_name}): {total_records_on_day}")
 
+            # Check if the records are dummy for the date
+            # records_dummy_for_date = self.growatt_client.is_device_history_dummy(records)
+
             # If records exist and overwrite is True, then first delete the records for the device and date
             if records_count > 0 and overwrite:
                 self.logger.info(f"Deleting records for device {device_sn} (user: {user_name}) on {date_str}")
@@ -104,9 +107,6 @@ class HistoryIngestionService(BaseService):
                 self.logger.info(f"Fetching history for device {device_sn} (user: {user_name}) on {date_str} and page {page}")
                 history_data = self.growatt_client.fetch_device_history(device_sn, inverter_metadata, date_str, date_str, page)
                 self.logger.info(f"History data fetched - current_count: {len(history_data['datas'])}, total_count: {history_data['count']} records on {date_str} for device {device_sn} (user: {user_name})")
-                
-                if len(history_data['datas']) == 0:
-                    break
 
                 database_entries = []
                 db_result = None
@@ -122,6 +122,9 @@ class HistoryIngestionService(BaseService):
                     all_db_results.append(db_result)
                 else:
                     self.logger.info(f"Not storing records for device {device_sn} (user: {user_name}) on {date_str}")
+
+                if len(history_data['datas']) == 0:
+                    break
 
             response = {
                 'device_id': device_sn,
