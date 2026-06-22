@@ -55,3 +55,7 @@ reports/
 
 # OS
 .DS_Store
+batch-ingest-history.log
+batch-analyze-disruptions.log
+batch-ingest-plant-energy-daily.log
+batch-ingest-plant-summary.log

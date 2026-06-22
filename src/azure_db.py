@@ -1459,34 +1459,37 @@ class AzureDB:
             # Get connection from pool
             conn = self.connection_pool.getconn()
             cursor = conn.cursor()
-            
+
+            # Only consider the current day's data when determining current power output
+            current_date = self.get_current_time_ist().date()
+
             if plant_id:
                 self.logger.debug(f"Querying current power output for user: {username}, plant: {plant_id}")
-                
+
                 # Query to get the latest pac value for the user and plant
                 cursor.execute(
                     """
                     SELECT pac
                     FROM power_gen_history
-                    WHERE user_name = %s AND plant_id = %s
+                    WHERE user_name = %s AND plant_id = %s AND DATE(datetime) = %s
                     ORDER BY datetime DESC
                     LIMIT 1
                     """,
-                    (username, plant_id)
+                    (username, plant_id, current_date)
                 )
             else:
                 self.logger.debug(f"Querying current power output for user: {username} (all plants)")
-                
+
                 # Query to get the latest pac value for the user
                 cursor.execute(
                     """
                     SELECT pac
                     FROM power_gen_history
-                    WHERE user_name = %s
+                    WHERE user_name = %s AND DATE(datetime) = %s
                     ORDER BY datetime DESC
                     LIMIT 1
                     """,
-                    (username,)
+                    (username, current_date)
                 )
             
             # Fetch the result
