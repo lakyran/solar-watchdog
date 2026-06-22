@@ -5,9 +5,6 @@
 name: Build and deploy Python app to Azure Web App - unisolartech-watchdog (databox)
 
 on:
-  push:
-    branches:
-      - mainline
   workflow_dispatch:
 
 jobs:
