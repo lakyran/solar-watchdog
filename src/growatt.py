@@ -228,7 +228,7 @@ class GrowattAPI:
         """
         database_entries = []
         total_records_on_day = 0
-        DAYS_TO_CONSIDER_VERY_OLD_DATE = 60
+        DAYS_TO_CONSIDER_VERY_OLD_DATE = 100
         
         if 'count' in history_data:
             total_records_on_day = history_data['count']
