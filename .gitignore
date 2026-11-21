@@ -43,6 +43,9 @@ unisolar_env/
 # Azure
 *.publishsettings 
 
+# Internal infra details (live subscription/tenant/workspace IDs)
+docs/infrastructure.md
+
 # Workspace
 *.code-workspace
 
